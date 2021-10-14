@@ -16,6 +16,7 @@ from scipy.stats import chisquare, chi2_contingency
 from rhc import mutual_info
 from rhc import recursiveHierarchicalClustering
 import logging
+from datetime import datetime
 
 np.seterr(all='raise')
 
@@ -30,6 +31,8 @@ if __name__ == '__main__':
 
   file_handler = logging.FileHandler('n-gram.log')
   myLogger.addHandler(file_handler)
+
+  myLogger.info(f'Start time: {datetime.now()}')
 
 # %%
 queries = pd.read_csv('new_logs.csv', index_col="idx", dtype={"AnonID": "Int64", "Query": "string", "QueryTime": "string", "ItemRank": "Int32", "ClickURL": "string", "Type": "string", "SessionNum": "Int32"}, keep_default_na=False, na_values=[""])
