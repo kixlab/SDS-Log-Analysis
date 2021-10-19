@@ -227,7 +227,7 @@ def compute_polar_distance(n_gram_vec_1, n_gram_vec_2):
   return distance
 
 
-def divisive_clustering(ngrams, concat_set, n_clusters = 100):
+def divisive_clustering(ngrams, concat_set, n_clusters, k):
   vectors = np.asarray([ngrams_to_vectors(ngram, concatenated_set=concat_set) for ngram in ngrams])
 
   clusters = np.asarray([1 for vector in vectors])
@@ -276,7 +276,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters = 100):
     if idx == -1:
       break
     
-    divide(vectors, clusters, distinguishing_features, clusters_info, idx, whole_distances)
+    divide(vectors, clusters, distinguishing_features, clusters_info, idx, whole_distances, k)
     score = silhouette_score(vectors, clusters, metric='cosine')
 
     mod_clusters = [np.where(clusters == i)[0] for i in np.unique(clusters)]
@@ -287,7 +287,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters = 100):
 
   return clusters, distinguishing_features, vectors, clusters_info
 
-def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id, whole_distances):
+def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id, whole_distances, k):
 
   myLogger.info('Dividing cluster %d' % cluster_id)
   selected_vector_idx = np.where(clusters == cluster_id)[0]
@@ -385,8 +385,8 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   halfpoint = recursiveHierarchicalClustering.getHalfPoint(chisqs)
   res = recursiveHierarchicalClustering.getSweetSpotL(chisqs[:max(200, 2 * halfpoint)])
   myLogger.info('Initial res: %d' % res)
-  if res > 3:
-    res = 3
+  if res > k:
+    res = k
   cutoff_features = [x[0] for x in chisqs[:res]]
   # print(chisqs, res, cutoff_features)
   # cutoff_point = next(i for i,v in enumerate(chisqs) if v[0] == res)
@@ -466,30 +466,31 @@ clusters_info_dict = {}
 
 # %%
 
-for n in range(3, 6):
-  ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-  clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100)
-  score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
-  myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
+for k in [5, 10, 20]:
+  for n in range(3, 6):
+    ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
+    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
+    score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
+    myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
 
-  with open(f'n-gram-{n}.txt', 'w') as f:
-    f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
-    for i in range(SAMPLE_SIZE):
-      label_divisive = str(clusters_dict[3][i])
-      userid = str(sample[i][0])
-      group = str(sample[i][1])
-      g = group_by_sessions.get_group(sample[i])
-      previous_query = g.iloc[0]['Query']
-      row = label_divisive + ',' + '+'.join(sequences[i]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
-      f.write(row)
-  
-  with open(f'cluster-info-{n}.txt', 'w') as f:
-    for key, cluster_info in clusters_info_dict[3].items():
-      f.write("Cluster %d: diameter %f, size %d \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"]))
-      children = str(cluster_info["children"])
-      f.write(f"Children {children} \n")
-      f.write("Distinguishing factors\n")
-      f.write(str([concat_set_dict[3][idx] for idx in distinguishing_features_dict[3][key]])) 
+    with open(f'n-gram-{n}-{k}.txt', 'w') as f:
+      f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
+      for i in range(SAMPLE_SIZE):
+        label_divisive = str(clusters_dict[3][i])
+        userid = str(sample[i][0])
+        group = str(sample[i][1])
+        g = group_by_sessions.get_group(sample[i])
+        previous_query = g.iloc[0]['Query']
+        row = label_divisive + ',' + '+'.join(sequences[i]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
+        f.write(row)
+    
+    with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
+      for key, cluster_info in clusters_info_dict[3].items():
+        f.write("Cluster %d: diameter %f, size %d \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"]))
+        children = str(cluster_info["children"])
+        f.write(f"Children {children} \n")
+        f.write("Distinguishing factors\n")
+        f.write(str([concat_set_dict[3][idx] for idx in distinguishing_features_dict[3][key]])) 
 
 # %%
 
