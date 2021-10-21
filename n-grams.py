@@ -22,7 +22,7 @@ np.seterr(all='raise')
 
 nlp = spacy.load('en_core_web_lg')
 stopwords = nlp.Defaults.stop_words
-
+MIN_CLUSTER_SIZE = 100
 # %%
 
 if __name__ == '__main__':
@@ -151,19 +151,19 @@ def create_n_gram(sequence, n):
   return ngram + create_n_gram(sequence, n - 1)
 
 
-def compute_distance(n_gram_1, n_gram_2, concatenated_set):
-  counter_ngram_1 = Counter(n_gram_1)
-  counter_ngram_2 = Counter(n_gram_2)
+# def compute_distance(n_gram_1, n_gram_2, concatenated_set):
+#   counter_ngram_1 = Counter(n_gram_1)
+#   counter_ngram_2 = Counter(n_gram_2)
 
 
-  n_gram_vec_1 = np.asarray([(counter_ngram_1[n]) for n in concatenated_set])
-  n_gram_vec_1 = n_gram_vec_1 / np.linalg.norm(n_gram_vec_1)
-  n_gram_vec_2 = np.asarray([(counter_ngram_2[n]) for n in concatenated_set])
-  n_gram_vec_2 = n_gram_vec_2 / np.linalg.norm(n_gram_vec_2)
+#   n_gram_vec_1 = np.asarray([(counter_ngram_1[n]) for n in concatenated_set])
+#   n_gram_vec_1 = n_gram_vec_1 / np.linalg.norm(n_gram_vec_1)
+#   n_gram_vec_2 = np.asarray([(counter_ngram_2[n]) for n in concatenated_set])
+#   n_gram_vec_2 = n_gram_vec_2 / np.linalg.norm(n_gram_vec_2)
 
-  distance = np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
+#   distance = 2 * np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
 
-  return distance
+#   return distance
 
 def ngrams_to_vectors(n_gram_1, concatenated_set):
   counter_ngram_1 = Counter(n_gram_1)
@@ -173,20 +173,20 @@ def ngrams_to_vectors(n_gram_1, concatenated_set):
   return n_gram_vec_1
 
 
-def generate_sequences_and_n_grams(group_by_sessions, sample, n = 5):
-  sequences = []
-  ngrams = []
+# def generate_sequences_and_n_grams(group_by_sessions, sample, n = 5):
+#   sequences = []
+#   ngrams = []
 
-  for s in sample:
-    g = group_by_sessions.get_group(s)
-    flattened_log = flatten_logs(g)
-    ngram = create_n_gram(flattened_log, n)
-    sequences.append(flattened_log)
-    ngrams.append(ngram)
+#   for s in sample:
+#     g = group_by_sessions.get_group(s)
+#     flattened_log = flatten_logs(g)
+#     ngram = create_n_gram(flattened_log, n)
+#     sequences.append(flattened_log)
+#     ngrams.append(ngram)
 
-  concat_set = list(set([ngram for n in ngrams for ngram in n]))
+#   concat_set = list(set([ngram for n in ngrams for ngram in n]))
 
-  return sequences, ngrams, concat_set
+#   return sequences, ngrams, concat_set
 
 def generate_n_grams(sequences, n = 5):
   ngrams = [create_n_gram(seq, n) for seq in sequences]
@@ -206,6 +206,7 @@ def modularity(clusters, distances, m):
       e_matrix[i, j] = np.sum(selected_matrix) / (m)
       if i == j:
         e_matrix[i, j] = e_matrix[i, j] / 2
+        e_matrix[i, j] = (np.trace(selected_matrix) / (2 * m)) + e_matrix[i,j]
       e_matrix[j, i] = e_matrix[i, j]
 
   modularity = np.trace(e_matrix) - np.sum(np.dot(e_matrix, e_matrix))
@@ -214,16 +215,16 @@ def modularity(clusters, distances, m):
 
   return modularity
 
-def normalize_vectors(vectors):
-  # average_vector = np.average(vectors, axis=0)
-  normalized_vectors = vectors #  - average_vector
+# def normalize_vectors(vectors):
+#   # average_vector = np.average(vectors, axis=0)
+#   normalized_vectors = vectors #  - average_vector
 
-  normalized_vectors = normalize(normalized_vectors, axis = 1)
+#   normalized_vectors = normalize(normalized_vectors, axis = 1)
 
-  return normalized_vectors
+#   return normalized_vectors
 
 def compute_polar_distance(n_gram_vec_1, n_gram_vec_2):
-  distance = np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
+  distance = 2 * np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
   return distance
 
 def getHalfPoint(scores):
@@ -295,10 +296,6 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k):
   len_vectors = len(vectors)
 
   whole_distances = np.zeros((len_vectors, len_vectors))
-
-
-  MIN_CLUSTER_SIZE = 100
-
 
   for i in range(len_vectors):
     for j in range(i + 1):
@@ -401,13 +398,19 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   # splinter_cluster = selected_vectors[~mask]
   # remaining_cluster = selected_vectors[mask]
 
+  in_clusters = selected_vector_idx[~mask]
+  out_clusters = selected_vector_idx[mask]
+
+  if (in_clusters.size < MIN_CLUSTER_SIZE * 0.5) or (out_clusters.size < MIN_CLUSTER_SIZE * 0.5):
+    clusters_info[cluster_id]['type'] = 'Leaf'
+    return
+
   in_cluster_id = max(clusters_info.keys()) + 1
   out_cluster_id = max(clusters_info.keys()) + 2
 
   clusters_info[cluster_id]["children"] = [in_cluster_id, out_cluster_id]
 
-  in_clusters = selected_vector_idx[~mask]
-  out_clusters = selected_vector_idx[mask]
+
 
   clusters[in_clusters] = in_cluster_id
   clusters[out_clusters] = out_cluster_id
@@ -498,7 +501,7 @@ for idx, _ in ss.iterrows():
 
 SAMPLE_SIZE = 5000
 
-random.seed(10)
+random.seed(0)
 
 sample = random.sample(tuples, SAMPLE_SIZE)
 
