@@ -208,7 +208,7 @@ def modularity(clusters, distances, m):
         e_matrix[i, j] = e_matrix[i, j] / 2
       e_matrix[j, i] = e_matrix[i, j]
 
-  modularity = np.trace(e_matrix) - np.sum(e_matrix * e_matrix)
+  modularity = np.trace(e_matrix) - np.sum(np.dot(e_matrix, e_matrix))
 
   # print(e_matrix)
 
@@ -360,11 +360,6 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   if cluster_id == 1:
     distances = whole_distances
   else:
-
-    # print(distances.size)
-
-    # normalized_vectors = normalize_vectors(selected_vectors)
-
     for i in range(selected_vector_size):
       for j in range(i+1):
         try:
@@ -447,7 +442,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   if res > k:
     print(res)
     res = k
-  cutoff_features = [x[0] for x in chisqs[:(res+1)]]
+  cutoff_features = [x[2] for x in chisqs[:(res+1)]]
   # print(chisqs, res, cutoff_features)
   # cutoff_point = next(i for i,v in enumerate(chisqs) if v[0] == res)
   # cutoff_features = [x[0] for x in chisqs[:cutoff_point]]
@@ -456,7 +451,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   # print(cutoff_features)
 
   distinguishing_features[in_cluster_id] = distinguishing_features[cluster_id] + cutoff_features
-  distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id]
+  distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] + cutoff_features
 
   in_cluster_dist = whole_distances[np.ix_(in_clusters, in_clusters)]
   out_cluster_dist = whole_distances[np.ix_(out_clusters, out_clusters)]
@@ -527,7 +522,7 @@ clusters_info_dict = {}
 # %%
 
 for k in [20]:
-  for n in range(2, 3):
+  for n in range(2, 6):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 10, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
