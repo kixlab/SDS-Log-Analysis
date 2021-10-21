@@ -313,7 +313,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k):
         "children": None
       }
     }
-  m = np.sum(whole_distances)
+  m = np.sum((1 - whole_distances))
 
   for i in range(n_clusters):
     myLogger.info('%dth division' % (i))
