@@ -301,7 +301,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k):
 
 
   for i in range(len_vectors):
-    for j in range(i):
+    for j in range(i + 1):
       whole_distances[i, j] = compute_polar_distance(vectors[i], vectors[j]) #compute_distance(ngrams[i], ngrams[j], concatenated_set=concat_set)
       whole_distances[j, i] = whole_distances[i, j]
 
@@ -366,7 +366,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
     # normalized_vectors = normalize_vectors(selected_vectors)
 
     for i in range(selected_vector_size):
-      for j in range(i):
+      for j in range(i+1):
         try:
           if np.any(selected_vectors[i]) == False or np.any(selected_vectors[j]) == False:
             distances[i, j] = 0
@@ -526,7 +526,7 @@ clusters_info_dict = {}
 # %%
 
 for k in [20, 10]:
-  for n in range(3, 6):
+  for n in range(2, 3):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')

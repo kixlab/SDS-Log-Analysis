@@ -31,7 +31,7 @@ from array import *
 import sys, os, math, time, json
 from functools import reduce
 
-if __name__ == "__main__":
+if __name__ == "__main__" or __name__ =="__mp_main__":
 	import calculateDistance, mutual_info
 else:
 	from . import calculateDistance, mutual_info
