@@ -226,6 +226,64 @@ def compute_polar_distance(n_gram_vec_1, n_gram_vec_2):
   distance = np.arccos(1 - spatial.distance.cosine(n_gram_vec_1, n_gram_vec_2)) / np.pi #np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
   return distance
 
+def getHalfPoint(scores):
+	values = [x[1] for x in scores]
+	total = sum(values) * 3 / 4
+	cur = 0
+	idx = 0
+	for (idx, score, featureNum) in scores:
+		cur += score
+		if cur > total:
+			break
+	# print('half point stats', idx, min(values), max(values))
+	return idx
+
+def getSweetSpotL(evalResults):
+	if len(evalResults) == 0: return 0
+	cutoff = currentKnee = evalResults[-1][0]
+	# print(evalResults)
+	lastKnee = currentKnee + 1
+
+	while currentKnee < lastKnee:
+		lastKnee = currentKnee
+		currentKnee = LMethod([item for item in evalResults if item[0] <= cutoff])
+		# print(currentKnee)
+		cutoff = currentKnee * 2
+
+	return currentKnee
+
+# tool used for finding out the defining feature threshold
+# performs linear regression
+def linearReg(evalResults):
+	x = np.array([xv for (xv,yv, featureNum) in evalResults])
+	y = np.array([yv for (xv,yv, featureNum) in evalResults])
+	# print(x, y)
+	A = np.vstack([x, np.ones(len(x))]).T
+	result = np.linalg.lstsq(A,y)
+	m, c = result[0]
+	residual = result[1]
+	# print(result)
+	return ((m, c), residual if len(evalResults) > 2 else 0)
+
+# using the L-Method, find of the sweetspot for getting defining features
+def LMethod(evalResults):
+	# print(len(evalResults))
+	if len(evalResults) < 4:
+		return len(evalResults)
+	# the partition point c goes from the second point to the -3'th point
+	minResidual = np.inf
+	minCons = None
+	minCutoff = None
+	for cidx in range(1, len(evalResults) - 2):
+		(con1, residual1) = linearReg(evalResults[:cidx + 1])
+		(con2, residual2) = linearReg(evalResults[cidx + 1:])
+		if (residual1 + residual2) < minResidual:
+			minCons = (con1, con2)
+			minCutoff = cidx
+			minResidual = residual1 + residual2
+	if minCutoff == None:
+		print(('minCutoff is None', evalResults))
+	return evalResults[minCutoff][0]
 
 def divisive_clustering(ngrams, concat_set, n_clusters, k):
   vectors = np.asarray([ngrams_to_vectors(ngram, concatenated_set=concat_set) for ngram in ngrams])
@@ -382,8 +440,9 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
       max_chisq = chi2
       max_idx = i
   chisqs = sorted(chisqs, key= lambda x: x[1], reverse = True)
-  halfpoint = recursiveHierarchicalClustering.getHalfPoint(chisqs)
-  res = recursiveHierarchicalClustering.getSweetSpotL(chisqs[:max(200, 2 * halfpoint)])
+  chisqs = [(idx, score[1], score[0]) for idx, score in enumerate(chisqs)]
+  halfpoint = getHalfPoint(chisqs)
+  res = getSweetSpotL(chisqs[:max(200, 2 * halfpoint)])
   myLogger.info('Initial res: %d' % res)
   if res > k:
     res = k
