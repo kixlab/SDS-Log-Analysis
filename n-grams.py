@@ -335,7 +335,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k):
       break
     
     divide(vectors, clusters, distinguishing_features, clusters_info, idx, whole_distances, k)
-    score = silhouette_score(vectors, clusters, metric='cosine')
+    score = silhouette_score(whole_distances, clusters, metric='precomputed')
 
     mod_clusters = [np.where(clusters == i)[0] for i in np.unique(clusters)]
     modularity_score = modularity(mod_clusters, whole_distances, m)
@@ -451,7 +451,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   # print(cutoff_features)
 
   distinguishing_features[in_cluster_id] = distinguishing_features[cluster_id] + cutoff_features
-  distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] + cutoff_features
+  distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] # + cutoff_features
 
   in_cluster_dist = whole_distances[np.ix_(in_clusters, in_clusters)]
   out_cluster_dist = whole_distances[np.ix_(out_clusters, out_clusters)]
