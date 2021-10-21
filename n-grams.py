@@ -223,7 +223,7 @@ def normalize_vectors(vectors):
   return normalized_vectors
 
 def compute_polar_distance(n_gram_vec_1, n_gram_vec_2):
-  distance = np.arccos(1 - spatial.distance.cosine(n_gram_vec_1, n_gram_vec_2)) / np.pi #np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
+  distance = np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
   return distance
 
 def getHalfPoint(scores):
@@ -445,6 +445,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   res = getSweetSpotL(chisqs[:max(200, 2 * halfpoint)])
   myLogger.info('Initial res: %d' % res)
   if res > k:
+    print(res)
     res = k
   cutoff_features = [x[0] for x in chisqs[:(res+1)]]
   # print(chisqs, res, cutoff_features)
@@ -502,7 +503,7 @@ for idx, _ in ss.iterrows():
 
 SAMPLE_SIZE = 5000
 
-random.seed(0)
+random.seed(10)
 
 sample = random.sample(tuples, SAMPLE_SIZE)
 
@@ -525,17 +526,17 @@ clusters_info_dict = {}
 
 # %%
 
-for k in [20, 10]:
+for k in [20]:
   for n in range(2, 3):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
+    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 10, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
     myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
 
     with open(f'n-gram-{n}-{k}.txt', 'w') as f:
       f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
       for i in range(SAMPLE_SIZE):
-        label_divisive = str(clusters_dict[3][i])
+        label_divisive = str(clusters_dict[n][i])
         userid = str(sample[i][0])
         group = str(sample[i][1])
         g = group_by_sessions.get_group(sample[i])
@@ -544,12 +545,12 @@ for k in [20, 10]:
         f.write(row)
     
     with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
-      for key, cluster_info in clusters_info_dict[3].items():
+      for key, cluster_info in clusters_info_dict[n].items():
         f.write("Cluster %d: diameter %f, size %d \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"]))
         children = str(cluster_info["children"])
         f.write(f"Children {children} \n")
         f.write("Distinguishing factors\n")
-        f.write(str([concat_set_dict[3][idx] for idx in distinguishing_features_dict[3][key]])) 
+        f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]])) 
 
 # %%
 
