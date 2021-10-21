@@ -201,8 +201,8 @@ def modularity(clusters, distances, m):
 
   e_matrix = np.zeros((num_clusters, num_clusters))
   for i in range(len(clusters)):
-    for j in range(i):
-      selected_matrix = distances[np.ix_(clusters[i], clusters[j])]
+    for j in range(i+1):
+      selected_matrix = 1 - distances[np.ix_(clusters[i], clusters[j])]
       e_matrix[i, j] = np.sum(selected_matrix) / (m)
       if i == j:
         e_matrix[i, j] = e_matrix[i, j] / 2
@@ -446,7 +446,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   myLogger.info('Initial res: %d' % res)
   if res > k:
     res = k
-  cutoff_features = [x[0] for x in chisqs[:res]]
+  cutoff_features = [x[0] for x in chisqs[:(res+1)]]
   # print(chisqs, res, cutoff_features)
   # cutoff_point = next(i for i,v in enumerate(chisqs) if v[0] == res)
   # cutoff_features = [x[0] for x in chisqs[:cutoff_point]]
@@ -525,7 +525,7 @@ clusters_info_dict = {}
 
 # %%
 
-for k in [5, 10, 20]:
+for k in [20, 10]:
   for n in range(3, 6):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
