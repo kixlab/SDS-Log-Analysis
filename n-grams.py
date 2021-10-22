@@ -484,6 +484,10 @@ newIDs = qqq.loc[qqq['SessionNum'] >= 19]
 # %%
 group_by_sessions = queries.groupby(["AnonID", "SessionNum"])
 
+group_by_sessions = group_by_sessions.filter(lambda x: not (x["Query"].str.contains('www').any()))
+group_by_sessions = group_by_sessions.groupby(["AnonID", "SessionNum"])
+
+
 tuples = []
 # for idx, row in newIDs.iterrows():
 #   tuples += [(row["AnonID"], i) for i in range(row["SessionNum"])]
@@ -527,12 +531,13 @@ clusters_info_dict = {}
 for k in [20]:
   for n in range(2, 6):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 10, k)
+    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
     myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
 
     with open(f'n-gram-{n}-{k}.txt', 'w') as f:
       f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
+      f.write('\n')
       for i in range(SAMPLE_SIZE):
         label_divisive = str(clusters_dict[n][i])
         userid = str(sample[i][0])
@@ -544,7 +549,7 @@ for k in [20]:
     
     with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
       for key, cluster_info in clusters_info_dict[n].items():
-        f.write("Cluster %d: diameter %f, size %d \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"]))
+        f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
         children = str(cluster_info["children"])
         f.write(f"Children {children} \n")
         f.write("Distinguishing factors\n")
