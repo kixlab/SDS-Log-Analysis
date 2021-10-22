@@ -553,7 +553,8 @@ for k in [20]:
         children = str(cluster_info["children"])
         f.write(f"Children {children} \n")
         f.write("Distinguishing factors\n")
-        f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]])) 
+        f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
+        f.write("\n")
 
 # %%
 
