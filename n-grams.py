@@ -484,7 +484,7 @@ newIDs = qqq.loc[qqq['SessionNum'] >= 19]
 # %%
 group_by_sessions = queries.groupby(["AnonID", "SessionNum"])
 
-group_by_sessions = group_by_sessions.filter(lambda x: not (x["Query"].str.contains('www').any()))
+group_by_sessions = group_by_sessions.filter(lambda x: not ((x["Query"].str.contains('www').any() or x["Query"].str.contains('.com').any())))
 group_by_sessions = group_by_sessions.groupby(["AnonID", "SessionNum"])
 
 
@@ -495,7 +495,7 @@ tuples = []
 ## First, extract all tuples with appropriately long sessions
 
 ssss = group_by_sessions.count()
-ss = ssss[ssss["Query"] >= 5]
+ss = ssss # [ssss["Query"] >= 5]
 
 for idx, _ in ss.iterrows():
   tuples += [idx]
