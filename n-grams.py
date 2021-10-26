@@ -17,6 +17,7 @@ from rhc import mutual_info
 from rhc import recursiveHierarchicalClustering
 import logging
 from datetime import datetime
+import json
 
 np.seterr(all='raise')
 
@@ -345,11 +346,15 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k):
 def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id, whole_distances, k):
 
   myLogger.info('Dividing cluster %d' % cluster_id)
+
+  distinguishing_feature = [f for idx, features in distinguishing_features[cluster_id] for f, score in features]
   selected_vector_idx = np.where(clusters == cluster_id)[0]
   # print(selected_vector_idx)
   selected_vector_size = len(selected_vector_idx)
   selected_vectors = vectors[selected_vector_idx].copy()
-  selected_vectors[:, distinguishing_features[cluster_id]] = 0
+  # selected_vectors[:, distinguishing_features[cluster_id]] = 0
+  selected_vectors[:, distinguishing_feature] = 0
+
   # print(distinguishing_features[cluster_id])
 
   distances = np.zeros((selected_vector_size, selected_vector_size))
@@ -370,7 +375,9 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
           print(sequences[i], sequences[j])
           print(vectors[i], vectors[j])
           print(selected_vectors[i], selected_vectors[j])
-          print([concat_set_dict[n][idx] for idx in distinguishing_features[cluster_id]])
+          # print([concat_set_dict[n][idx] for idx in distinguishing_features[cluster_id]])
+          print([concat_set_dict[n][idx] for idx in distinguishing_feature])
+
 
 
   # splinters = [np.argmax(np.sum(distances, axis = 0))]
@@ -421,7 +428,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   max_idx = 0
   chisqs = []
   for i in range(vectors.shape[1]):
-    if i in distinguishing_features[cluster_id]:
+    if i in distinguishing_feature:
       continue
     splinter_cluster_dist = vectors[in_clusters, i]
     remaining_cluster_dist = vectors[out_clusters, i]
@@ -445,7 +452,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   if res > k:
     print(res)
     res = k
-  cutoff_features = [x[2] for x in chisqs[:(res+1)]]
+  cutoff_features = [(x[2], x[1]) for x in chisqs[:(res+1)]]
   # print(chisqs, res, cutoff_features)
   # cutoff_point = next(i for i,v in enumerate(chisqs) if v[0] == res)
   # cutoff_features = [x[0] for x in chisqs[:cutoff_point]]
@@ -453,7 +460,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   # print(res)
   # print(cutoff_features)
 
-  distinguishing_features[in_cluster_id] = distinguishing_features[cluster_id] + cutoff_features
+  distinguishing_features[in_cluster_id] = distinguishing_features[cluster_id] + [(in_cluster_id, cutoff_features)]
   distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] # + cutoff_features
 
   in_cluster_dist = whole_distances[np.ix_(in_clusters, in_clusters)]
@@ -529,9 +536,9 @@ clusters_info_dict = {}
 # %%
 
 for k in [20]:
-  for n in range(2, 6):
+  for n in range(2, 3):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
+    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 3, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
     myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
 
@@ -547,14 +554,35 @@ for k in [20]:
         row = label_divisive + ',' + '+'.join(sequences[i]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
         f.write(row)
     
-    with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
+    # with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
+    #   for key, cluster_info in clusters_info_dict[n].items():
+    #     f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
+    #     children = str(cluster_info["children"])
+    #     f.write(f"Children {children} \n")
+    #     f.write("Distinguishing factors\n")
+    #     f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
+    #     f.write("\n")
+
+    with open(f'cluster-info-{n}-{k}.json', 'w') as f:
+      tree = {
+        "root_id": 1,
+        "nodes": []
+      }
       for key, cluster_info in clusters_info_dict[n].items():
-        f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
-        children = str(cluster_info["children"])
-        f.write(f"Children {children} \n")
-        f.write("Distinguishing factors\n")
-        f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
-        f.write("\n")
+        distinguishing_feature = [f for idx, features in distinguishing_features_dict[n][key] for f, score in features]
+        node = {
+          "id": key,
+          "label": "None",
+          "distinguishing_features": [{
+            "action_items": concat_set_dict[n][idx],
+            "frequency": None
+          } for idx in distinguishing_feature],
+          "children": cluster_info["children"],
+          "subtree_size": cluster_info["cluster_size"]
+        }
+        tree["nodes"].append(node)
+
+      json.dump(tree, f, ensure_ascii=True)
 
 # %%
 
