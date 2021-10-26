@@ -122,14 +122,18 @@ def flatten_logs(logs_dataframe):
       else:
         flattened.append("RefinedQuery")
     elif row["Type"] == "Click":
-      if row["ItemRank"] == 1:
-        flattened.append("Click1")
-      elif row["ItemRank"] >= 2 and row["ItemRank"] < 6:
-        flattened.append("Click2-5")
-      elif row["ItemRank"] >= 6 and row["ItemRank"] < 10:
-        flattened.append("Click6-10")
+      if row["ItemRank"] < 6:
+        flattened.append("Click1-5")
       else:
-        flattened.append("Click11+")
+        flattened.append("Click6+")
+      # if row["ItemRank"] == 1:
+      #   flattened.append("Click1")
+      # elif row["ItemRank"] >= 2 and row["ItemRank"] < 6:
+      #   flattened.append("Click2-5")
+      # elif row["ItemRank"] >= 6 and row["ItemRank"] < 10:
+      #   flattened.append("Click6-10")
+      # else:
+      #   flattened.append("Click11+")
     elif row["Type"] == "NextPage":
       flattened.append("NextPage")
 
