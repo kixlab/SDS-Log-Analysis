@@ -145,9 +145,10 @@ def create_n_gram(sequence, n):
     return []
   ngram = []
   length = len(sequence)
-  if length < n:
-    filled = sequence + ["Empty" for i in range(n - length)]
-    ngram.append(tuple(filled))
+  if (length < n):
+    if (length == n - 1):
+      filled = sequence + ["Empty" for i in range(n - length)]
+      ngram.append(tuple(filled))
 
   else:
     for i in range(length - n + 1):
