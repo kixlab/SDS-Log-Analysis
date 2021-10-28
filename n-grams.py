@@ -506,8 +506,11 @@ tuples = []
 
 ## First, extract all tuples with appropriately long sessions
 
-ssss = group_by_sessions.count()
-ss = ssss # [ssss["Query"] >= 5]
+# ssss = group_by_sessions.count()
+# ss = ssss # [ssss["Query"] >= 5]
+
+ssss = group_by_sessions.nunique()
+ss = ssss[ssss["Query"] <= 5]
 
 for idx, _ in ss.iterrows():
   tuples += [idx]
