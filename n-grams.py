@@ -164,7 +164,7 @@ def flatten_logs(logs_dataframe):
       num_queries += 1
     elif row["Type"] == "Click":
       clicks += 1
-      cur_clicks.append(row["ItemRank"])
+      cur_clicks.append(row["ItemRank"] if row["ItemRank"] > 0 else 1)
       if row["ItemRank"] < 6:
         flattened.append("Click1-5")
         clicks1 +=1
@@ -602,7 +602,7 @@ for idx, _ in ss.iterrows():
 # %%
 ### Then, draw 5,000 samples
 
-SAMPLE_SIZE = 500
+SAMPLE_SIZE = 10000
 
 random.seed(0)
 
