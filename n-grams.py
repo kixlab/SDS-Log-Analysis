@@ -11,7 +11,7 @@ from collections import Counter
 from sklearn.preprocessing import normalize
 from sklearn.metrics import silhouette_score
 import spacy
-from scipy.cluster.hierarchy import dendrogram
+from scipy.cluster.hierarchy import average, dendrogram
 from scipy.stats import chisquare, chi2_contingency
 from rhc import mutual_info
 from rhc import recursiveHierarchicalClustering
@@ -102,7 +102,20 @@ def flatten_logs(logs_dataframe):
   previous_query = ''
   previous_processed_query = None
   flattened = []
-  
+
+  clicks1 = 0
+  clicks = 0
+
+  cur_clicks = []
+  max_RRs = []
+  mean_RRs = []
+  p_skips = []
+  num_queries = 0
+  abandon_counts = 0
+  reformulate_counts = 0
+
+  sequences = []
+
   for idx, row in logs_dataframe.iterrows():
     if previous_row is None: # Every logstream starts with a query
       # print(row)
@@ -110,34 +123,105 @@ def flatten_logs(logs_dataframe):
       previous_row = row
       previous_query = row['Query']
       previous_processed_query = process_query(previous_query)
+      num_queries += 1
+
+      sequences.append({
+        "Type": "NewQuery",
+        "Query": row['Query']
+      })
       
       continue
 
     if row["Type"] == "Query":
+      if len(cur_clicks) > 0:
+        maxRank = max(cur_clicks)
+        minRank = min(cur_clicks)
+        max_RRs.append(1 / minRank)
+        mean_RRs.append(sum([(1 / r) for r in cur_clicks]) / len(cur_clicks))
+        viewedItems = len(set(cur_clicks))
+        p_skips.append(1 - (viewedItems / maxRank))
+      else:
+        abandon_counts += 1
+
       new_processed_query = process_query(row['Query'])
       if is_new_query(previous_query, previous_processed_query, row['Query'], new_processed_query):
         flattened.append("NewQuery")
         previous_query = row['Query']
         previous_processed_query = new_processed_query
+        sequences.append({
+          "Type": "NewQuery",
+          "Query": row['Query']
+        })
       else:
         flattened.append("RefinedQuery")
+        sequences.append({
+          "Type": "RefinedQuery",
+          "Query": row['Query']
+        })
+        reformulate_counts += 1
+
+      cur_clicks = []
+      num_queries += 1
     elif row["Type"] == "Click":
+      clicks += 1
+      cur_clicks.append(row["ItemRank"])
       if row["ItemRank"] < 6:
         flattened.append("Click1-5")
-      else:
-        flattened.append("Click6+")
+        clicks1 +=1
+        sequences.append({
+          "Type": "Click1-5",
+          "Query": row['Query'],
+          "Rank": row['ItemRank'],
+          "ClickedURL": row['ClickURL']
+        })
+      # else:
+      #   flattened.append("Click6+")
       # if row["ItemRank"] == 1:
       #   flattened.append("Click1")
       # elif row["ItemRank"] >= 2 and row["ItemRank"] < 6:
       #   flattened.append("Click2-5")
-      # elif row["ItemRank"] >= 6 and row["ItemRank"] < 10:
-      #   flattened.append("Click6-10")
-      # else:
-      #   flattened.append("Click11+")
+      elif row["ItemRank"] >= 6 and row["ItemRank"] < 10:
+        flattened.append("Click6-10")
+        sequences.append({
+          "Type": "Click6-10",
+          "Query": row['Query'],
+          "Rank": row['ItemRank'],
+          "ClickedURL": row['ClickURL']
+        })
+      else:
+        flattened.append("Click11+")
+        sequences.append({
+          "Type": "Click11+",
+          "Query": row['Query'],
+          "Rank": row['ItemRank'],
+          "ClickedURL": row['ClickURL']
+        })
     elif row["Type"] == "NextPage":
       flattened.append("NextPage")
 
-  return flattened
+  if len(cur_clicks) > 0:
+    maxRank = max(cur_clicks)
+    minRank = min(cur_clicks)
+    max_RRs.append(1 / minRank)
+    mean_RRs.append(sum([(1 / r) for r in cur_clicks]) / len(cur_clicks))
+    viewedItems = len(set(cur_clicks))
+    p_skips.append(1 - (viewedItems / maxRank))
+  else:
+    if flattened[-1] == "NewQuery" or flattened[-1] == "RefinedQuery":
+      abandon_counts += 1
+
+  p_skip = sum(p_skips)/len(p_skips) if len(p_skips) > 0 else 1
+  click1 = clicks1 / num_queries
+  max_RR = sum(max_RRs) / len(max_RRs) if len(max_RRs) > 0 else 0
+  mean_RR = sum(mean_RRs) / len(mean_RRs) if len(mean_RRs) > 0 else 0
+  abandonment_rate = abandon_counts / num_queries
+  reformulation_rate = reformulate_counts / num_queries
+  
+  clicks_per_query = clicks / num_queries
+
+  return flattened, (p_skip, click1, max_RR, mean_RR, abandonment_rate, reformulation_rate, num_queries, clicks_per_query), sequences
+
+
 
 
 def create_n_gram(sequence, n):
@@ -518,18 +602,33 @@ for idx, _ in ss.iterrows():
 # %%
 ### Then, draw 5,000 samples
 
-SAMPLE_SIZE = 5000
+SAMPLE_SIZE = 500
 
 random.seed(0)
 
 sample = random.sample(tuples, SAMPLE_SIZE)
 
 sequences = []
+json_seqs = []
 
 for s in sample:
   g = group_by_sessions.get_group(s)
-  flattened_log = flatten_logs(g)
+  flattened_log, value, json_seq = flatten_logs(g)
   sequences.append(flattened_log)
+  json_seqs.append({
+    "SessionNum": s[1],
+    "UserID": s[0],
+    "ClusterID": 0,
+    "Sequence": json_seq,
+    "pSkip": value[0],
+    "Click@1-5": value[1],
+    "MaxRR": value[2],
+    "MeanRR": value[3],
+    "AbandonmentRate": value[4],
+    "ReformulationRate": value[5],
+    "QueriesCount": value[6],
+    "ClicksPerQuery": value[7]
+  })
 
 # %%
 seq_dict = {}
@@ -544,9 +643,9 @@ clusters_info_dict = {}
 # %%
 
 for k in [20]:
-  for n in range(2, 3):
+  for n in range(2, 6):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 3, k)
+    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
     myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
 
@@ -577,20 +676,26 @@ for k in [20]:
         "nodes": []
       }
       for key, cluster_info in clusters_info_dict[n].items():
-        distinguishing_feature = [f for idx, features in distinguishing_features_dict[n][key] for f, score in features]
+        distinguishing_feature = [(f, score) for idx, features in distinguishing_features_dict[n][key] for f, score in features]
         node = {
           "id": key,
           "label": "None",
           "distinguishing_features": [{
             "action_items": concat_set_dict[n][idx],
-            "frequency": None
-          } for idx in distinguishing_feature],
+            "score": score
+          } for idx, score in distinguishing_feature],
           "children": cluster_info["children"],
           "subtree_size": cluster_info["cluster_size"]
         }
         tree["nodes"].append(node)
 
       json.dump(tree, f, ensure_ascii=True)
+
+    with open(f'sequences-{n}-{k}.json', 'w') as f:
+      for i in range(SAMPLE_SIZE):
+        label_divisive = clusters_dict[n][i]
+        json_seqs[i]["ClusterID"] = int(label_divisive)
+      json.dump(json_seqs, f, ensure_ascii=True)
 
 # %%
 
