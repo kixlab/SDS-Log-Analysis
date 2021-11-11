@@ -43,6 +43,11 @@ queries = queries.loc[queries['Query'] != '-']
 
 # %%
 
+
+
+
+# %%
+
 def compute_edit_distance(queryA, queryB): # Character level
   a = len(queryA)
   b = len(queryB)
@@ -220,6 +225,52 @@ def flatten_logs(logs_dataframe):
   clicks_per_query = clicks / num_queries
 
   return flattened, (p_skip, click1, max_RR, mean_RR, abandonment_rate, reformulation_rate, num_queries, clicks_per_query), sequences
+
+
+def merge_clusters(cluster_info_list, distinguishing_features, clusters, vectors): 
+
+  for key, cluster in cluster_info_list.items():
+    if cluster["type"] == "Merged":
+      continue
+    merge_one_level(cluster_info_list, cluster, key, distinguishing_features, clusters, vectors)
+
+def count_features(cluster_id, distinguishing_features, clusters, vectors):
+
+  distinguishing_feature = [f for idx, features in distinguishing_features[cluster_id] for f, score in features]
+  selected_vector_idx = np.where(clusters == cluster_id)[0]
+  # print(selected_vector_idx)
+  selected_vector_size = len(selected_vector_idx)
+  selected_vectors = vectors[selected_vector_idx].copy()
+  # selected_vectors[:, distinguishing_features[cluster_id]] = 0
+  selected_vectors[:, distinguishing_feature] = 0
+
+  counts = np.sum(selected_vectors, axis=0)
+
+  vector_idxs = np.argpartition(counts, -3)[-3:]
+
+  features = [(int(i), int(counts[i])) for i in vector_idxs]
+
+  return features
+
+
+def merge_one_level(cluster_info_list, cluster_info, cluster_id, distinguishing_features, clusters, vectors):
+
+  if cluster_info["children"] is None:
+    return
+
+  out_cluster_id = cluster_info["out_cluster_id"]
+  out_cluster = cluster_info_list[out_cluster_id]
+
+  if out_cluster["children"] is None:
+    features = count_features(out_cluster_id, distinguishing_features, clusters, vectors)
+    distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] + [(out_cluster_id, features)]
+    out_cluster["type"] = 'Remainder'
+  else:
+    merge_one_level(cluster_info_list, out_cluster, out_cluster_id, distinguishing_features, clusters, vectors)
+    cluster_info["children"] = [cluster_info["in_cluster_id"]] + out_cluster["children"]
+    out_cluster["type"] = "Merged"
+
+
 
 
 
@@ -504,9 +555,12 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   in_cluster_id = max(clusters_info.keys()) + 1
   out_cluster_id = max(clusters_info.keys()) + 2
 
+  clusters_info[cluster_id]["in_cluster_id"] = in_cluster_id
+  clusters_info[cluster_id]["out_cluster_id"] = out_cluster_id
+
   clusters_info[cluster_id]["children"] = [in_cluster_id, out_cluster_id]
-
-
+  
+  # clusters_info[cluster_id]["children"].append(in_cluster_id)
 
   clusters[in_clusters] = in_cluster_id
   clusters[out_clusters] = out_cluster_id
@@ -602,7 +656,7 @@ for idx, _ in ss.iterrows():
 # %%
 ### Then, draw 5,000 samples
 
-SAMPLE_SIZE = 10000
+SAMPLE_SIZE = 500
 
 random.seed(0)
 
@@ -627,7 +681,8 @@ for s in sample:
     "AbandonmentRate": value[4],
     "ReformulationRate": value[5],
     "QueriesCount": value[6],
-    "ClicksPerQuery": value[7]
+    "ClicksPerQuery": value[7],
+    "KeywordCluster": 0
   })
 
 # %%
@@ -643,11 +698,13 @@ clusters_info_dict = {}
 # %%
 
 for k in [20]:
-  for n in range(2, 6):
+  for n in range(5, 6):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
     myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
+
+    merge_clusters(clusters_info_dict[n], distinguishing_features_dict[n], clusters_dict[n], vectors_dict[n])
 
     with open(f'n-gram-{n}-{k}.txt', 'w') as f:
       f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
@@ -676,14 +733,17 @@ for k in [20]:
         "nodes": []
       }
       for key, cluster_info in clusters_info_dict[n].items():
-        distinguishing_feature = [(f, score) for idx, features in distinguishing_features_dict[n][key] for f, score in features]
+        distinguishing_feature = [(cluster_id, f, score) for cluster_id, features in distinguishing_features_dict[n][key] for f, score in features]
         node = {
           "id": key,
-          "label": "None",
+          "label": cluster_info['type'],
           "distinguishing_features": [{
+            "cluster_id": cluster_id,
             "action_items": concat_set_dict[n][idx],
             "score": score
-          } for idx, score in distinguishing_feature],
+          } for cluster_id, idx, score in distinguishing_feature],
+          "divided_cluster": cluster_info["in_cluster_id"] if cluster_info["children"] is not None else None,
+          "remaining_cluster": cluster_info["out_cluster_id"] if cluster_info["children"] is not None else None,
           "children": cluster_info["children"],
           "subtree_size": cluster_info["cluster_size"]
         }
