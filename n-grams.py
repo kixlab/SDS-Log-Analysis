@@ -25,7 +25,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 
 np.seterr(all='raise')
 
-nlp = spacy.load('en_core_web_lg')
+nlp = spacy.load('en_core_web_sm')
 model = SentenceTransformer('all-mpnet-base-v2')
 
 stopwords = nlp.Defaults.stop_words
@@ -757,8 +757,8 @@ all_topics = topic_model.get_topics()
 # %% Output 
 
 for i in range(len(topics)):
-  json_seqs[i]['BERTopicsKeywordCluster'] = topics[i] 
-  json_seqs[i]['KMeansCluster'] = kmeans_labels[i]
+  json_seqs[i]['BERTopicsKeywordCluster'] = int(topics[i])
+  json_seqs[i]['KMeansCluster'] = int(kmeans_labels[i])
 
 with open('BERTopics-cluster.json', 'w') as f:
   json.dump(all_topics, f, ensure_ascii=True, indent = 2)
