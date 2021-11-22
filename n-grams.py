@@ -18,10 +18,16 @@ from rhc import recursiveHierarchicalClustering
 import logging
 from datetime import datetime
 import json
+from bertopic import BERTopic
+from sentence_transformers import util, SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering, KMeans
+from sklearn.feature_extraction.text import CountVectorizer
 
 np.seterr(all='raise')
 
 nlp = spacy.load('en_core_web_lg')
+model = SentenceTransformer('all-mpnet-base-v2')
+
 stopwords = nlp.Defaults.stop_words
 MIN_CLUSTER_SIZE = 100
 # %%
@@ -625,6 +631,9 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
     "children": None
   }
 
+# %%
+
+
 
 # %%
 group_by_sessions = queries.groupby('AnonID', sort=False, as_index=False)
@@ -634,7 +643,10 @@ newIDs = qqq.loc[qqq['SessionNum'] >= 19]
 # %%
 group_by_sessions = queries.groupby(["AnonID", "SessionNum"])
 
-group_by_sessions = group_by_sessions.filter(lambda x: not ((x["Query"].str.contains('www').any() or x["Query"].str.contains('.com').any())))
+group_by_sessions = group_by_sessions.filter(lambda x: not ((
+  x["Query"].str.contains('porn|fuck|nude|sex|www|\.com|\.net', regex=True).any()
+)))
+
 group_by_sessions = group_by_sessions.groupby(["AnonID", "SessionNum"])
 
 
@@ -658,16 +670,21 @@ for idx, _ in ss.iterrows():
 
 SAMPLE_SIZE = 500
 
-random.seed(0)
+random.seed(3)
 
 sample = random.sample(tuples, SAMPLE_SIZE)
 
 sequences = []
 json_seqs = []
+query_text = []
 
 for s in sample:
   g = group_by_sessions.get_group(s)
   flattened_log, value, json_seq = flatten_logs(g)
+  queries = g[g['Type'] == "Query"]['Query']
+  v = []
+  queries_concat = queries.str.cat(sep='. ')
+  query_text.append(queries_concat)
   sequences.append(flattened_log)
   json_seqs.append({
     "SessionNum": s[1],
@@ -682,8 +699,72 @@ for s in sample:
     "ReformulationRate": value[5],
     "QueriesCount": value[6],
     "ClicksPerQuery": value[7],
-    "KeywordCluster": 0
+    "BERTopicsKeywordCluster": 0,
+    "KMeansCluster": 0
   })
+
+# %% KMeans Topic Clustering parts
+N_CLUSTERS = 100
+
+def c_tf_idf(documents, m, ngram_range=(1, 3)):
+    count = CountVectorizer(ngram_range=ngram_range, stop_words="english").fit(documents)
+    t = count.transform(documents).toarray()
+    w = t.sum(axis=1)
+    tf = np.divide(t.T, w)
+    sum_t = t.sum(axis=0)
+    idf = np.log(np.divide(m, sum_t)).reshape(-1, 1)
+    tf_idf = np.multiply(tf, idf)
+
+    return tf_idf, count
+
+def extract_top_n_words_per_topic(tf_idf, count, docs_per_topic, n=20):
+    words = count.get_feature_names()
+    tf_idf_transposed = tf_idf.T
+    indices = tf_idf_transposed.argsort()[:, -n:]
+    labels = list(range(N_CLUSTERS))
+    top_n_words = {}
+    for i, label in enumerate(labels):
+        print(i)
+        top_n_words[label] = [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1]
+#     top_n_words = {label: [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1] for i, label in enumerate(labels)}
+    return top_n_words
+
+cc = KMeans(n_clusters=N_CLUSTERS)
+
+query_embeddings = model.encode(query_text, convert_to_numpy=True)
+query_embeddings = query_embeddings.astype('float64')
+kmeans_labels = cc.fit_predict(query_embeddings)
+
+docs = []
+
+for i in range(N_CLUSTERS):
+    idxs = np.argwhere(kmeans_labels == i)
+    doc = ''
+    for j in idxs:
+        doc += (query_text[j[0]] + ' ')
+    docs.append(doc)
+  
+tf_idf, count = c_tf_idf(docs, m=SAMPLE_SIZE)
+top_n_words = extract_top_n_words_per_topic(tf_idf, count, docs)
+
+# %% BERTopic Clustering parts
+
+topic_model = BERTopic(embedding_model = model)
+topics, prob = topic_model.fit_transform(query_text)
+
+all_topics = topic_model.get_topics()
+
+# %% Output 
+
+for i in range(len(topics)):
+  json_seqs[i]['BERTopicsKeywordCluster'] = topics[i] 
+  json_seqs[i]['KMeansCluster'] = kmeans_labels[i]
+
+with open('BERTopics-cluster.json', 'w') as f:
+  json.dump(all_topics, f, ensure_ascii=True, indent = 2)
+
+with open('KMeans-clusters.json', 'w') as f:
+  json.dump(top_n_words, f, ensure_ascii=True, indent=2)
 
 # %%
 seq_dict = {}
@@ -749,13 +830,13 @@ for k in [20]:
         }
         tree["nodes"].append(node)
 
-      json.dump(tree, f, ensure_ascii=True)
+      json.dump(tree, f, ensure_ascii=True, indent = 2)
 
     with open(f'sequences-{n}-{k}.json', 'w') as f:
       for i in range(SAMPLE_SIZE):
         label_divisive = clusters_dict[n][i]
         json_seqs[i]["ClusterID"] = int(label_divisive)
-      json.dump(json_seqs, f, ensure_ascii=True)
+      json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
 
 # %%
 
