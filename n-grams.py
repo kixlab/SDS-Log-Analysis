@@ -116,7 +116,7 @@ def flatten_logs(logs_dataframe):
 
   clicks1 = 0
   clicks = 0
-
+  clicks1_flag = False
   cur_clicks = []
   max_RRs = []
   mean_RRs = []
@@ -144,6 +144,7 @@ def flatten_logs(logs_dataframe):
       continue
 
     if row["Type"] == "Query":
+      clicks1_flag = False
       if len(cur_clicks) > 0:
         maxRank = max(cur_clicks)
         minRank = min(cur_clicks)
@@ -178,7 +179,9 @@ def flatten_logs(logs_dataframe):
       cur_clicks.append(row["ItemRank"] if row["ItemRank"] > 0 else 1)
       if row["ItemRank"] < 6:
         flattened.append("Click1-5")
-        clicks1 +=1
+        if clicks1_flag == False:
+          clicks1 +=1
+          clicks1_flag = True
         sequences.append({
           "Type": "Click1-5",
           "Query": row['Query'],
@@ -668,7 +671,7 @@ for idx, _ in ss.iterrows():
 # %%
 ### Then, draw 5,000 samples
 
-SAMPLE_SIZE = 500
+SAMPLE_SIZE = 10000
 
 random.seed(3)
 
@@ -780,6 +783,7 @@ clusters_info_dict = {}
 
 for k in [20]:
   for n in range(5, 6):
+    
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
     score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
