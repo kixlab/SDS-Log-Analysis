@@ -433,8 +433,8 @@ def LMethod(evalResults):
 		print(('minCutoff is None', evalResults))
 	return evalResults[minCutoff][0]
 
-def divisive_clustering(ngrams, concat_set, n_clusters, k):
-  vectors = np.asarray([ngrams_to_vectors(ngram, concatenated_set=concat_set) for ngram in ngrams])
+def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
+  vectors = np.asarray([ngrams_to_vectors(ngram, concatenated_set=concat_set) for idx, ngram in enumerate(ngrams) if idx in target])
 
   clusters = np.asarray([1 for vector in vectors])
 
@@ -724,7 +724,7 @@ def extract_top_n_words_per_topic(tf_idf, count, docs_per_topic, n=20):
     labels = list(range(N_CLUSTERS))
     top_n_words = {}
     for i, label in enumerate(labels):
-        print(i)
+        # print(i)
         top_n_words[label] = [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1]
 #     top_n_words = {label: [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1] for i, label in enumerate(labels)}
     return top_n_words
@@ -751,7 +751,7 @@ top_n_words = extract_top_n_words_per_topic(tf_idf, count, docs)
 
 topic_model = BERTopic(embedding_model = model)
 topics, prob = topic_model.fit_transform(query_text)
-
+topics = np.asarray(topics)
 all_topics = topic_model.get_topics()
 
 # %% Output 
@@ -781,62 +781,65 @@ clusters_info_dict = {}
 for k in [20]:
   for n in range(5, 6):
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k)
-    score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
-    myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
+    for j in all_topics.keys():
+      idxs = np.argwhere(topics == i)
+      clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k, target = [])
+      score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
+      myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
 
-    merge_clusters(clusters_info_dict[n], distinguishing_features_dict[n], clusters_dict[n], vectors_dict[n])
+      merge_clusters(clusters_info_dict[n], distinguishing_features_dict[n], clusters_dict[n], vectors_dict[n])
 
-    with open(f'n-gram-{n}-{k}.txt', 'w') as f:
-      f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
-      f.write('\n')
-      for i in range(SAMPLE_SIZE):
-        label_divisive = str(clusters_dict[n][i])
-        userid = str(sample[i][0])
-        group = str(sample[i][1])
-        g = group_by_sessions.get_group(sample[i])
-        previous_query = g.iloc[0]['Query']
-        row = label_divisive + ',' + '+'.join(sequences[i]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
-        f.write(row)
-    
-    # with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
-    #   for key, cluster_info in clusters_info_dict[n].items():
-    #     f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
-    #     children = str(cluster_info["children"])
-    #     f.write(f"Children {children} \n")
-    #     f.write("Distinguishing factors\n")
-    #     f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
-    #     f.write("\n")
+      with open(f'n-gram-{n}-{k}.txt', 'w') as f:
+        f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
+        f.write('\n')
+        for i in range(SAMPLE_SIZE):
+          label_divisive = str(clusters_dict[n][i])
+          userid = str(sample[i][0])
+          group = str(sample[i][1])
+          g = group_by_sessions.get_group(sample[i])
+          previous_query = g.iloc[0]['Query']
+          row = label_divisive + ',' + '+'.join(sequences[i]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
+          f.write(row)
+      
+      # with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
+      #   for key, cluster_info in clusters_info_dict[n].items():
+      #     f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
+      #     children = str(cluster_info["children"])
+      #     f.write(f"Children {children} \n")
+      #     f.write("Distinguishing factors\n")
+      #     f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
+      #     f.write("\n")
 
-    with open(f'cluster-info-{n}-{k}.json', 'w') as f:
-      tree = {
-        "root_id": 1,
-        "nodes": []
-      }
-      for key, cluster_info in clusters_info_dict[n].items():
-        distinguishing_feature = [(cluster_id, f, score) for cluster_id, features in distinguishing_features_dict[n][key] for f, score in features]
-        node = {
-          "id": key,
-          "label": cluster_info['type'],
-          "distinguishing_features": [{
-            "cluster_id": cluster_id,
-            "action_items": concat_set_dict[n][idx],
-            "score": score
-          } for cluster_id, idx, score in distinguishing_feature],
-          "divided_cluster": cluster_info["in_cluster_id"] if cluster_info["children"] is not None else None,
-          "remaining_cluster": cluster_info["out_cluster_id"] if cluster_info["children"] is not None else None,
-          "children": cluster_info["children"],
-          "subtree_size": cluster_info["cluster_size"]
+      with open(f'cluster-info-{n}-{k}.json', 'a') as f:
+        tree = {
+          "root_id": 1,
+          "nodes": [],
+          "keyword_cluster": j
         }
-        tree["nodes"].append(node)
+        for key, cluster_info in clusters_info_dict[n].items():
+          distinguishing_feature = [(cluster_id, f, score) for cluster_id, features in distinguishing_features_dict[n][key] for f, score in features]
+          node = {
+            "id": key,
+            "label": cluster_info['type'],
+            "distinguishing_features": [{
+              "cluster_id": cluster_id,
+              "action_items": concat_set_dict[n][idx],
+              "score": score
+            } for cluster_id, idx, score in distinguishing_feature],
+            "divided_cluster": cluster_info["in_cluster_id"] if cluster_info["children"] is not None else None,
+            "remaining_cluster": cluster_info["out_cluster_id"] if cluster_info["children"] is not None else None,
+            "children": cluster_info["children"],
+            "subtree_size": cluster_info["cluster_size"]
+          }
+          tree["nodes"].append(node)
 
-      json.dump(tree, f, ensure_ascii=True, indent = 2)
+        json.dump(tree, f, ensure_ascii=True, indent = 2)
 
-    with open(f'sequences-{n}-{k}.json', 'w') as f:
-      for i in range(SAMPLE_SIZE):
-        label_divisive = clusters_dict[n][i]
-        json_seqs[i]["ClusterID"] = int(label_divisive)
-      json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
+      with open(f'sequences-{n}-{k}.json', 'a') as f:
+        for i in range(SAMPLE_SIZE):
+          label_divisive = clusters_dict[n][i]
+          json_seqs[i]["ClusterID"] = int(label_divisive)
+        json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
 
 # %%
 
