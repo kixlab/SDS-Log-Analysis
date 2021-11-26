@@ -29,7 +29,7 @@ nlp = spacy.load('en_core_web_sm')
 model = SentenceTransformer('all-mpnet-base-v2')
 
 stopwords = nlp.Defaults.stop_words
-MIN_CLUSTER_SIZE = 100
+MIN_CLUSTER_SIZE = 50
 # %%
 
 if __name__ == '__main__':
@@ -452,14 +452,14 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
       whole_distances[i, j] = compute_polar_distance(vectors[i], vectors[j]) #compute_distance(ngrams[i], ngrams[j], concatenated_set=concat_set)
       whole_distances[j, i] = whole_distances[i, j]
 
-    clusters_info = {
-      1: {
-        "type": 'Tree',
-        "cluster_size": len(vectors),
-        "diameter": np.max(whole_distances),
-        "children": None
-      }
+  clusters_info = {
+    1: {
+      "type": 'Tree',
+      "cluster_size": len(vectors),
+      "diameter": np.max(whole_distances),
+      "children": None
     }
+  }
   m = np.sum((1 - whole_distances))
 
   for i in range(n_clusters):
@@ -471,7 +471,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
     for key, cluster in clusters_info.items():
       # if cluster["diameter"] < 0.05:
       #   cluster["type"] = 'Leaf'
-      if cluster["cluster_size"] < MIN_CLUSTER_SIZE:
+      if cluster["cluster_size"] < min(MIN_CLUSTER_SIZE, 0.1 * len_vectors):
         cluster["type"] = 'Leaf'
       if cluster["cluster_size"] > max_cluster_size and cluster["type"] == 'Tree' and cluster["children"] is None:
         idx = key    
@@ -482,7 +482,10 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
       break
     
     divide(vectors, clusters, distinguishing_features, clusters_info, idx, whole_distances, k)
-    score = silhouette_score(whole_distances, clusters, metric='precomputed')
+    try:
+      score = silhouette_score(whole_distances, clusters, metric='precomputed')
+    except:
+      score = 0
 
     mod_clusters = [np.where(clusters == i)[0] for i in np.unique(clusters)]
     modularity_score = modularity(mod_clusters, whole_distances, m)
@@ -732,27 +735,27 @@ def extract_top_n_words_per_topic(tf_idf, count, docs_per_topic, n=20):
 #     top_n_words = {label: [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1] for i, label in enumerate(labels)}
     return top_n_words
 
-cc = KMeans(n_clusters=N_CLUSTERS)
+# cc = KMeans(n_clusters=N_CLUSTERS)
 
-query_embeddings = model.encode(query_text, convert_to_numpy=True)
-query_embeddings = query_embeddings.astype('float64')
-kmeans_labels = cc.fit_predict(query_embeddings)
+# query_embeddings = model.encode(query_text, convert_to_numpy=True)
+# query_embeddings = query_embeddings.astype('float64')
+# kmeans_labels = cc.fit_predict(query_embeddings)
 
-docs = []
+# docs = []
 
-for i in range(N_CLUSTERS):
-    idxs = np.argwhere(kmeans_labels == i)
-    doc = ''
-    for j in idxs:
-        doc += (query_text[j[0]] + ' ')
-    docs.append(doc)
+# for i in range(N_CLUSTERS):
+#     idxs = np.argwhere(kmeans_labels == i)
+#     doc = ''
+#     for j in idxs:
+#         doc += (query_text[j[0]] + ' ')
+#     docs.append(doc)
   
-tf_idf, count = c_tf_idf(docs, m=SAMPLE_SIZE)
-top_n_words = extract_top_n_words_per_topic(tf_idf, count, docs)
+# tf_idf, count = c_tf_idf(docs, m=SAMPLE_SIZE)
+# top_n_words = extract_top_n_words_per_topic(tf_idf, count, docs)
 
 # %% BERTopic Clustering parts
 
-topic_model = BERTopic(embedding_model = model)
+topic_model = BERTopic(embedding_model = model, nr_topics="auto")
 topics, prob = topic_model.fit_transform(query_text)
 topics = np.asarray(topics)
 all_topics = topic_model.get_topics()
@@ -761,13 +764,13 @@ all_topics = topic_model.get_topics()
 
 for i in range(len(topics)):
   json_seqs[i]['BERTopicsKeywordCluster'] = int(topics[i])
-  json_seqs[i]['KMeansCluster'] = int(kmeans_labels[i])
+#  json_seqs[i]['KMeansCluster'] = int(kmeans_labels[i])
 
 with open('BERTopics-cluster.json', 'w') as f:
   json.dump(all_topics, f, ensure_ascii=True, indent = 2)
 
-with open('KMeans-clusters.json', 'w') as f:
-  json.dump(top_n_words, f, ensure_ascii=True, indent=2)
+# with open('KMeans-clusters.json', 'w') as f:
+#   json.dump(top_n_words, f, ensure_ascii=True, indent=2)
 
 # %%
 seq_dict = {}
@@ -786,23 +789,27 @@ for k in [20]:
     
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     for j in all_topics.keys():
-      idxs = np.argwhere(topics == i)
-      clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k, target = [])
-      score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
-      myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
+      idxs = np.argwhere(topics == j).flatten()
+      clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k, target = idxs)
+      try:
+        score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
+        myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
+      except:
+        myLogger.info("n-gram size: %f, silhouette score: %f" % (n, 0))
+
 
       merge_clusters(clusters_info_dict[n], distinguishing_features_dict[n], clusters_dict[n], vectors_dict[n])
 
-      with open(f'n-gram-{n}-{k}.txt', 'w') as f:
+      with open(f'n-gram-{n}-{k}.txt', 'a') as f:
         f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
         f.write('\n')
-        for i in range(SAMPLE_SIZE):
-          label_divisive = str(clusters_dict[n][i])
+        for idx, i in enumerate(idxs):
+          label_divisive = str(clusters_dict[n][idx])
           userid = str(sample[i][0])
           group = str(sample[i][1])
           g = group_by_sessions.get_group(sample[i])
           previous_query = g.iloc[0]['Query']
-          row = label_divisive + ',' + '+'.join(sequences[i]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
+          row = label_divisive + ',' + '+'.join(sequences[idx]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
           f.write(row)
       
       # with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
@@ -838,12 +845,13 @@ for k in [20]:
           tree["nodes"].append(node)
 
         json.dump(tree, f, ensure_ascii=True, indent = 2)
+      for idx, i in enumerate(idxs):
+        label_divisive = clusters_dict[n][idx]
+        json_seqs[i]["ClusterID"] = int(label_divisive)
 
-      with open(f'sequences-{n}-{k}.json', 'a') as f:
-        for i in range(SAMPLE_SIZE):
-          label_divisive = clusters_dict[n][i]
-          json_seqs[i]["ClusterID"] = int(label_divisive)
-        json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
+
+    with open(f'sequences-{n}-{k}.json', 'a') as f:
+      json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
 
 # %%
 
