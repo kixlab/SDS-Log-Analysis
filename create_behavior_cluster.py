@@ -29,7 +29,7 @@ nlp = spacy.load('en_core_web_sm')
 model = SentenceTransformer('all-mpnet-base-v2')
 
 stopwords = nlp.Defaults.stop_words
-MIN_CLUSTER_SIZE = 50
+MIN_CLUSTER_SIZE = 20
 # %%
 
 if __name__ == '__main__':
@@ -51,20 +51,15 @@ if __name__ == '__main__':
 
 def flatten_logs(sequences_list):
   
-  return [a["Type"] for s in sequences_list for a in s["Sequences"]] 
+  result =  [[a["Type"] for a in s["Sequence"]] for s in sequences_list]
+  result.append("Empty")
+
+  return result
 
 
 
 
 # %%
-
-def merge_clusters(cluster_info_list, distinguishing_features, clusters, vectors): 
-
-  for key, cluster in cluster_info_list.items():
-    if cluster["type"] == "Merged":
-      continue
-    merge_one_level(cluster_info_list, cluster, key, distinguishing_features, clusters, vectors)
-
 def count_features(cluster_id, distinguishing_features, clusters, vectors):
 
   distinguishing_feature = [f for idx, features in distinguishing_features[cluster_id] for f, score in features]
@@ -77,12 +72,14 @@ def count_features(cluster_id, distinguishing_features, clusters, vectors):
 
   counts = np.sum(selected_vectors, axis=0)
 
-  vector_idxs = np.argpartition(counts, -3)[-3:]
+  if len(counts) > 3:
+    vector_idxs = np.argpartition(counts, -3)[-3:]
+  else:
+    vector_idxs = counts
 
   features = [(int(i), int(counts[i])) for i in vector_idxs]
 
   return features
-
 
 def merge_one_level(cluster_info_list, cluster_info, cluster_id, distinguishing_features, clusters, vectors):
 
@@ -92,7 +89,7 @@ def merge_one_level(cluster_info_list, cluster_info, cluster_id, distinguishing_
   out_cluster_id = cluster_info["out_cluster_id"]
   out_cluster = cluster_info_list[out_cluster_id]
 
-  if out_cluster["children"] is None:
+  if out_cluster["children"] is None: # Remainder cluster
     features = count_features(out_cluster_id, distinguishing_features, clusters, vectors)
     distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] + [(out_cluster_id, features)]
     out_cluster["type"] = 'Remainder'
@@ -101,9 +98,25 @@ def merge_one_level(cluster_info_list, cluster_info, cluster_id, distinguishing_
     cluster_info["children"] = [cluster_info["in_cluster_id"]] + out_cluster["children"]
     out_cluster["type"] = "Merged"
 
+def merge_clusters(cluster_info_list, distinguishing_features, clusters, vectors): 
 
+  for key, cluster in cluster_info_list.items():
+    if cluster["type"] == "Merged":
+      continue
+    merge_one_level(cluster_info_list, cluster, key, distinguishing_features, clusters, vectors)
 
+  for key, cluster in cluster_info_list.items(): # just simply count when cluster size is too small
+    if cluster["type"] == "Merged":
+      continue
 
+    if cluster['cluster_size'] < MIN_CLUSTER_SIZE:
+      features = count_features(key, distinguishing_features, clusters, vectors)
+      distinguishing_features[key] = [(k, f) for k, f in distinguishing_features[key] if k != key] + [(key, features)]
+
+    # For clusters with all scores zero
+    if sum([feature[1] for k, f in distinguishing_features[key] for feature in f]) == 0:
+      features = count_features(key, distinguishing_features, clusters, vectors)
+      distinguishing_features[key] = [(k, f) for k, f in distinguishing_features[key] if k != key] + [(key, features)]
 
 
 def create_n_gram(sequence, n):
@@ -238,7 +251,8 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
       "type": 'Tree',
       "cluster_size": len(vectors),
       "diameter": np.max(whole_distances),
-      "children": None
+      "children": None,
+      "parent": None
     }
   }
   m = np.sum((1 - whole_distances))
@@ -262,7 +276,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
     if idx == -1:
       break
     
-    divide(vectors, clusters, distinguishing_features, clusters_info, idx, whole_distances, k)
+    divide(vectors, clusters, distinguishing_features, clusters_info, idx, whole_distances, k, len_vectors)
     try:
       score = silhouette_score(whole_distances, clusters, metric='precomputed')
     except:
@@ -276,7 +290,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
 
   return clusters, distinguishing_features, vectors, clusters_info
 
-def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id, whole_distances, k):
+def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id, whole_distances, k, len_vectors):
 
   myLogger.info('Dividing cluster %d' % cluster_id)
 
@@ -305,11 +319,11 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
           distances[i, j] = compute_polar_distance(selected_vectors[i], selected_vectors[j]) #compute_distance(ngrams[i], ngrams[j], concatenated_set=concat_set)
           distances[j, i] = distances[i, j]
         except:
-          print(sequences[i], sequences[j])
+          # print(sequences[i], sequences[j])
           print(vectors[i], vectors[j])
           print(selected_vectors[i], selected_vectors[j])
           # print([concat_set_dict[n][idx] for idx in distinguishing_features[cluster_id]])
-          print([concat_set_dict[n][idx] for idx in distinguishing_feature])
+          # print([concat_set_dict[n][idx] for idx in distinguishing_feature])
 
 
 
@@ -341,7 +355,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   in_clusters = selected_vector_idx[~mask]
   out_clusters = selected_vector_idx[mask]
 
-  if (in_clusters.size < MIN_CLUSTER_SIZE * 0.5) or (out_clusters.size < MIN_CLUSTER_SIZE * 0.5):
+  if (in_clusters.size < max(min(MIN_CLUSTER_SIZE, 0.1 * len_vectors), 2)) or (out_clusters.size < max(min(MIN_CLUSTER_SIZE, 0.1 * len_vectors), 2)):
     clusters_info[cluster_id]['type'] = 'Leaf'
     return
 
@@ -407,7 +421,8 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
     "type": 'Tree',
     "cluster_size": in_clusters.shape[0],
     "diameter": np.max(in_cluster_dist),
-    "children": None
+    "children": None,
+    "parent": None
   }
 
 
@@ -415,7 +430,8 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
     "type": 'Tree',
     "cluster_size": out_clusters.shape[0],
     "diameter": np.max(out_cluster_dist),
-    "children": None
+    "children": None,
+    "parent": None
   }
 
 # %%
@@ -550,18 +566,38 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
 # topics, prob = topic_model.fit_transform(query_text)
 
 
-with open('BERTopics-cluster.json', 'r') as f:
-  all_topics = json.read(f)
+with open('BERTopics-cluster-50000-50-new.json', 'r') as f:
+  all_topics = json.load(f)
 
 # with open('KMeans-clusters.json', 'w') as f:
 #   json.dump(top_n_words, f, ensure_ascii=True, indent=2)
 
-with open('sequences.json', 'r') as f:
+with open('sequences-50000-new.json', 'r') as f:
   json_seqs = json.load(f)
 
-sequences = flatten_logs(json_seqs)
+# %% 
 
-topics = np.asaaray([s['BERTopicsKeywordCluster'] for s in json_seqs])
+# Sample from sequences
+
+SAMPLE_SIZE = 7500
+OUTLIER_SIZE = 500 #int(SAMPLE_SIZE * 0.1)
+VALID_SIZE = SAMPLE_SIZE - OUTLIER_SIZE
+
+
+valid_cluster_ids = [1, 2, 3, 4, 5, 6, 7, 9, 14, 16, 17, 19, 20, 22, 24, 25, 27, 28, 31, 33, 35, 36, 38, 39, 40, 41, 42, 43, 45, 47, 48, 49, 50, 52, 53, 55, 56, 58, 59, 61, 65, 68, 69, 74, 76, 79]
+
+# sequences = flatten_logs(json_seqs)
+
+outliers = [s for s in json_seqs if s['BERTopicsKeywordCluster'] == -1]
+valid_sequences = [s for s in json_seqs if s['BERTopicsKeywordCluster'] in valid_cluster_ids]
+random.seed(3)
+random_outliers = random.sample(outliers, k=OUTLIER_SIZE)
+random_valids = random.sample(valid_sequences, k=VALID_SIZE)
+
+random_seqs = random_outliers + random_valids
+sequences = flatten_logs(random_seqs)
+
+topics = np.asarray([s['BERTopicsKeywordCluster'] for s in random_seqs])
 
 # %%
 seq_dict = {}
@@ -579,8 +615,8 @@ for k in [20]:
   for n in range(3, 4):
     
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    for j in all_topics.keys():
-      idxs = np.argwhere(topics == j).flatten()
+    for j in set(topics):
+      idxs = np.argwhere(topics == int(j)).flatten()
       clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k, target = idxs)
       try:
         score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
@@ -616,10 +652,14 @@ for k in [20]:
         tree = {
           "root_id": 1,
           "nodes": [],
-          "keyword_cluster": j
+          "keyword_cluster": int(j)
         }
         for key, cluster_info in clusters_info_dict[n].items():
           distinguishing_feature = [(cluster_id, f, score) for cluster_id, features in distinguishing_features_dict[n][key] for f, score in features]
+          children = cluster_info["children"]
+          if children is not None:
+            for child in children:
+              clusters_info_dict[n][child]['parent'] = key
           node = {
             "id": key,
             "label": cluster_info['type'],
@@ -631,18 +671,19 @@ for k in [20]:
             "divided_cluster": cluster_info["in_cluster_id"] if cluster_info["children"] is not None else None,
             "remaining_cluster": cluster_info["out_cluster_id"] if cluster_info["children"] is not None else None,
             "children": cluster_info["children"],
-            "subtree_size": cluster_info["cluster_size"]
+            "subtree_size": cluster_info["cluster_size"],
+            "parent": cluster_info['parent'] # TODO
           }
           tree["nodes"].append(node)
 
         json.dump(tree, f, ensure_ascii=True, indent = 2)
       for idx, i in enumerate(idxs):
         label_divisive = clusters_dict[n][idx]
-        json_seqs[i]["ClusterID"] = int(label_divisive)
+        random_seqs[i]["ClusterID"] = int(label_divisive)
 
 
-    with open(f'sequences-{n}-{k}.json', 'a') as f:
-      json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
+    with open(f'sequences-{n}-{k}.json', 'w') as f:
+      json.dump(random_seqs, f, ensure_ascii=True, indent = 2)
 
 # %%
 
