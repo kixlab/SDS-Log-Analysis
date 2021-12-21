@@ -1,3 +1,5 @@
+## Process the raw AOL log data to divide them into sessions
+
 # %%
 import csv
 import pandas as pd
@@ -11,6 +13,7 @@ frames = []
 import traceback
 for txt in os.listdir('./aol')[0:1]:
     try:
+        # Read the AOL log files
         queries = pd.read_csv(f'./aol/{txt}', sep='\t', dtype={"AnonID": "Int64", "Query": "string", "QueryTime": "string", "ItemRank": "Int32", "ClickURL": "string"}, keep_default_na=False, na_values=[""])
         frames.append(queries)
     except Exception as e:
@@ -18,6 +21,7 @@ for txt in os.listdir('./aol')[0:1]:
         print(e)
         print(e.args)
         traceback.print_exc()
+
 
 queries = pd.concat(frames)
 queries['QueryTime'] = pd.to_datetime(queries['QueryTime'])
@@ -45,6 +49,7 @@ def dict_from_row(row, logType, sessionNum):
     }
 
 new_logs = []
+new_logs = []
 for id in filtered:
     user_log = queries.loc[queries['AnonID'] == id]
     current_query = ''
@@ -52,24 +57,29 @@ for id in filtered:
     current_session_num = 0
     for i in range(len(user_log)):
         if user_log.iat[i, 2] >= current_query_time + pd.Timedelta(30, unit="min"):
+            # If the time gap between the events are longer than 30 minutes, it is a new session
             current_session_num += 1
             current_query = user_log.iat[i, 1]
             current_query_time = user_log.iat[i, 2]
 
             new_logs.append(dict_from_row(user_log.iloc[i], "Query", current_session_num))
 
+            # Separate the click events
+
             if pd.notna(user_log.iat[i, 4]):
                 new_logs.append(dict_from_row(user_log.iloc[i], "Click", current_session_num))
 
         else:
-            # Within the same sessoin
+            # Within the same session
             if (user_log.iat[i, 1] == current_query) and (user_log.iat[i, 2] > current_query_time):
                 # pagination case
                 current_query_time = user_log.iat[i, 2]
                 new_logs.append(dict_from_row(user_log.iloc[i], "NextPage", current_session_num))
-
                 if pd.notna(user_log.iat[i, 4]):
-                    new_logs.append(dict_from_row(user_log.iloc[i], "Click", current_session_num))
+                    if user_log.iat[i, 3] <= 10: # previous one was just submitting the same query again
+                        new_logs[-1]['Type'] = "Query"
+                    else: # Clicks after pagination
+                        new_logs.append(dict_from_row(user_log.iloc[i], "Click", current_session_num))
             elif (user_log.iat[i, 1] == current_query) and (user_log.iat[i, 2] == current_query_time):
                 # Same query, same timestamp ==> must be different clicks
                 if pd.notna(user_log.iat[i, 4]):
@@ -86,6 +96,11 @@ for id in filtered:
                 if pd.notna(user_log.iat[i, 4]):
                     ## If user clicked sth from query refinement
                     new_logs.append(dict_from_row(user_log.iloc[i], "Click", current_session_num))
+        
+
+
+new_logs_df = pd.DataFrame(new_logs)
+new_logs_df.to_csv('./new_logs_new_nextpage.csv', index_label="idx")
         
 
 

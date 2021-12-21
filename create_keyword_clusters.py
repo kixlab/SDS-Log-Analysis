@@ -41,7 +41,9 @@ if __name__ == '__main__':
 
 # %%
 
-def compute_edit_distance(queryA, queryB): # Character level
+def compute_edit_distance(queryA, queryB): 
+  # https://stackoverflow.com/questions/14260126/how-python-levenshtein-ratio-difference-is-computed
+  # compute the edit distance between the two queries
   a = len(queryA)
   b = len(queryB)
   dp = [[0 for x in range(b + 1)] for x in range(a + 1)]
@@ -60,6 +62,7 @@ def compute_edit_distance(queryA, queryB): # Character level
   return dp[a][b]
 
 def compute_shared_words(queryA, queryB):
+  # compute the shared words between the two queries
   setA = set(queryA)
   setB = set(queryB)
 
@@ -74,7 +77,6 @@ def compute_shared_words(queryA, queryB):
 def compute_semantic_similarity(old_query, new_query):
   # embeddings = bc.encode([old_query, new_query])
   # return 1 - spatial.distance.cosine(embeddings[0], embeddings[1])
-
   return 1
 
 def is_new_query(old_query, old_processed_query, new_query, new_processed_query):
@@ -91,27 +93,29 @@ def is_new_query(old_query, old_processed_query, new_query, new_processed_query)
   return True
 
 def process_query(query):
+  # remove stopwords
   doc = nlp(query)
   tokens_wo_sw = [word.lemma_ for word in doc if ((word.is_stop == False) and (word.is_punct == False) and word.lemma_ != '-PRON-')]
   return tokens_wo_sw
 
 def flatten_logs(logs_dataframe):
+  # transform the logs dataframe into a sequence of user events
   previous_row = None
   previous_query = ''
   previous_processed_query = None
   flattened = []
 
-  clicks1 = 0
-  clicks = 0
+  clicks1 = 0 # count of queries with clicks on rank 1-5
+  clicks = 0 # count of total clicks
   clicks1_flag = False
-  cur_clicks = []
-  max_RRs = []
-  mean_RRs = []
-  p_skips = []
-  ndcgs = []
-  num_queries = 0
-  abandon_counts = 0
-  reformulate_counts = 0
+  cur_clicks = [] # list of clicks for the current query
+  max_RRs = [] # list of max RRs for the current session
+  mean_RRs = [] # list of mean RRs for the current session
+  p_skips = [] # list of p_skips for the current session
+  ndcgs = [] # list of ndcgs for the current session
+  num_queries = 0 # number of queries in the current session
+  abandon_counts = 0 # abandoned query counts in the current session
+  reformulate_counts = 0 # reformulated query counts in the current session
 
   sequences = []
 
@@ -244,16 +248,15 @@ def flatten_logs(logs_dataframe):
 # )))
 # group_by_sessions.to_csv('filtered.csv', index_label="idx")
 
+# Read the pre-processed AOL log file
+
 group_by_sessions = pd.read_csv('filtered.csv', index_col="idx", dtype={"AnonID": "Int64", "Query": "string", "QueryTime": "string", "ItemRank": "Int32", "ClickURL": "string", "Type": "string", "SessionNum": "Int32"}, keep_default_na=False, na_values=[""])
 group_by_sessions = group_by_sessions.groupby(["AnonID", "SessionNum"])
 
 
 tuples = []
 
-## First, extract all tuples with appropriately long sessions
-
-# ssss = group_by_sessions.count()
-# ss = ssss # [ssss["Query"] >= 5]
+## First, extract all sessions with not too many queries
 
 ssss = group_by_sessions.nunique()
 ss = ssss[ssss["Query"] <= 5]
@@ -262,7 +265,7 @@ for idx, _ in ss.iterrows():
   tuples += [idx]
 
 # %%
-### Then, draw 5,000 samples
+### Then, draw samples
 
 SAMPLE_SIZE = 50000
 
@@ -277,6 +280,7 @@ json_seqs = []
 query_text = []
 
 for s in tqdm(sample):
+  # for each session, extract the action sequences and query texts
   g = group_by_sessions.get_group(s)
   flattened_log, value, json_seq = flatten_logs(g)
   queries = g[g['Type'] == "Query"]['Query']
@@ -304,30 +308,31 @@ for s in tqdm(sample):
   })
 
 # %% KMeans Topic Clustering parts
-N_CLUSTERS = 100
 
-def c_tf_idf(documents, m, ngram_range=(1, 3)):
-    count = CountVectorizer(ngram_range=ngram_range, stop_words="english").fit(documents)
-    t = count.transform(documents).toarray()
-    w = t.sum(axis=1)
-    tf = np.divide(t.T, w)
-    sum_t = t.sum(axis=0)
-    idf = np.log(np.divide(m, sum_t)).reshape(-1, 1)
-    tf_idf = np.multiply(tf, idf)
+# N_CLUSTERS = 100
 
-    return tf_idf, count
+# def c_tf_idf(documents, m, ngram_range=(1, 3)):
+#     count = CountVectorizer(ngram_range=ngram_range, stop_words="english").fit(documents)
+#     t = count.transform(documents).toarray()
+#     w = t.sum(axis=1)
+#     tf = np.divide(t.T, w)
+#     sum_t = t.sum(axis=0)
+#     idf = np.log(np.divide(m, sum_t)).reshape(-1, 1)
+#     tf_idf = np.multiply(tf, idf)
 
-def extract_top_n_words_per_topic(tf_idf, count, docs_per_topic, n=20):
-    words = count.get_feature_names()
-    tf_idf_transposed = tf_idf.T
-    indices = tf_idf_transposed.argsort()[:, -n:]
-    labels = list(range(N_CLUSTERS))
-    top_n_words = {}
-    for i, label in enumerate(labels):
-        # print(i)
-        top_n_words[label] = [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1]
-#     top_n_words = {label: [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1] for i, label in enumerate(labels)}
-    return top_n_words
+#     return tf_idf, count
+
+# def extract_top_n_words_per_topic(tf_idf, count, docs_per_topic, n=20):
+#     words = count.get_feature_names()
+#     tf_idf_transposed = tf_idf.T
+#     indices = tf_idf_transposed.argsort()[:, -n:]
+#     labels = list(range(N_CLUSTERS))
+#     top_n_words = {}
+#     for i, label in enumerate(labels):
+#         # print(i)
+#         top_n_words[label] = [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1]
+# #     top_n_words = {label: [(words[j], tf_idf_transposed[i][j]) for j in indices[i]][::-1] for i, label in enumerate(labels)}
+#     return top_n_words
 
 # cc = KMeans(n_clusters=N_CLUSTERS)
 
@@ -348,7 +353,8 @@ def extract_top_n_words_per_topic(tf_idf, count, docs_per_topic, n=20):
 # top_n_words = extract_top_n_words_per_topic(tf_idf, count, docs)
 
 # %% BERTopic Clustering parts
-topic_model = BERTopic.load('BERTopic_model_50000_new', embedding_model='all-mpnet-base-v2')
+
+# topic_model = BERTopic.load('BERTopic_model_50000_new', embedding_model='all-mpnet-base-v2')
 
 # for q in tqdm(range(int(len(query_text) / 10))):
 #   try:
@@ -356,16 +362,24 @@ topic_model = BERTopic.load('BERTopic_model_50000_new', embedding_model='all-mpn
 #   except:
 #     print(query_text[q*10:(q+1)*10])
 
+# create the BERTopic model
+
 topic_model = BERTopic(embedding_model = 'all-mpnet-base-v2', nr_topics="auto", min_topic_size=50)
+
+# Cluster sessions by topics
 topics, prob = topic_model.fit_transform(query_text)
 topics = np.asarray(topics)
 all_topics = topic_model.get_topics()
 
 # # %% Output 
 
+# Output the results
+
 for i in range(len(topics)):
   json_seqs[i]['BERTopicsKeywordCluster'] = int(topics[i])
 #  json_seqs[i]['KMeansCluster'] = int(kmeans_labels[i])
+
+# save the cluster informations
 
 with open('BERTopics-cluster-50000-50-new.json', 'w') as f:
   json.dump(all_topics, f, ensure_ascii=True, indent = 2)
@@ -374,7 +388,7 @@ with open('BERTopics-cluster-50000-50-new.json', 'w') as f:
 # #   json.dump(top_n_words, f, ensure_ascii=True, indent=2)
 
 # # %%
-
+# save the sequences
 with open(f'sequences-50000-new.json', 'w') as f:
   json.dump(json_seqs, f, ensure_ascii=True, indent = 2)
 

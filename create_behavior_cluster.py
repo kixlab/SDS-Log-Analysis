@@ -49,6 +49,8 @@ if __name__ == '__main__':
 
 # %%
 
+# Create a sequence of actions from each session
+
 def flatten_logs(sequences_list):
   
   result =  [[a["Type"] for a in s["Sequence"]] for s in sequences_list]
@@ -60,6 +62,9 @@ def flatten_logs(sequences_list):
 
 
 # %%
+
+# in case of too small clusters, we need to count the number of times each feature appears in the cluster and add the most popular ones to the list of distinguishing features
+
 def count_features(cluster_id, distinguishing_features, clusters, vectors):
 
   distinguishing_feature = [f for idx, features in distinguishing_features[cluster_id] for f, score in features]
@@ -72,7 +77,7 @@ def count_features(cluster_id, distinguishing_features, clusters, vectors):
 
   counts = np.sum(selected_vectors, axis=0)
 
-  if len(counts) > 3:
+  if len(counts) > 3: # choose the top 3 features
     vector_idxs = np.argpartition(counts, -3)[-3:]
   else:
     vector_idxs = counts
@@ -81,22 +86,26 @@ def count_features(cluster_id, distinguishing_features, clusters, vectors):
 
   return features
 
+# merge the cluster with its outer children, which does not have its own distinguishing features
 def merge_one_level(cluster_info_list, cluster_info, cluster_id, distinguishing_features, clusters, vectors):
 
   if cluster_info["children"] is None:
     return
 
+  # select the outer children of the cluster
   out_cluster_id = cluster_info["out_cluster_id"]
   out_cluster = cluster_info_list[out_cluster_id]
 
-  if out_cluster["children"] is None: # Remainder cluster
+  if out_cluster["children"] is None: # Remainder cluster, which does not have any distinguishing features
     features = count_features(out_cluster_id, distinguishing_features, clusters, vectors)
     distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] + [(out_cluster_id, features)]
     out_cluster["type"] = 'Remainder'
-  else:
+  else: # merge the cluster with its outer children
     merge_one_level(cluster_info_list, out_cluster, out_cluster_id, distinguishing_features, clusters, vectors)
     cluster_info["children"] = [cluster_info["in_cluster_id"]] + out_cluster["children"]
     out_cluster["type"] = "Merged"
+
+# transform the binary tree of clusters into a list of clusters
 
 def merge_clusters(cluster_info_list, distinguishing_features, clusters, vectors): 
 
@@ -105,20 +114,20 @@ def merge_clusters(cluster_info_list, distinguishing_features, clusters, vectors
       continue
     merge_one_level(cluster_info_list, cluster, key, distinguishing_features, clusters, vectors)
 
-  for key, cluster in cluster_info_list.items(): # just simply count when cluster size is too small
+  for key, cluster in cluster_info_list.items(): 
     if cluster["type"] == "Merged":
       continue
 
-    if cluster['cluster_size'] < MIN_CLUSTER_SIZE:
+    if cluster['cluster_size'] < MIN_CLUSTER_SIZE: # when the cluster is too small, select the most popular features as distinguishing features
       features = count_features(key, distinguishing_features, clusters, vectors)
       distinguishing_features[key] = [(k, f) for k, f in distinguishing_features[key] if k != key] + [(key, features)]
 
-    # For clusters with all scores zero
+    # For clusters with all scores zero, select the most popular features as distinguishing features
     if sum([feature[1] for k, f in distinguishing_features[key] for feature in f]) == 0:
       features = count_features(key, distinguishing_features, clusters, vectors)
       distinguishing_features[key] = [(k, f) for k, f in distinguishing_features[key] if k != key] + [(key, features)]
 
-
+# create n-grams from the list of actions in the session
 def create_n_gram(sequence, n):
   if n < 2:
     return []
@@ -126,7 +135,7 @@ def create_n_gram(sequence, n):
   length = len(sequence)
   if (length < n):
     if (length == n - 1):
-      filled = sequence + ["Empty" for i in range(n - length)]
+      filled = sequence + ["Empty" for i in range(n - length)] # fill the session with "Empty" if the session is shorter than n
       ngram.append(tuple(filled))
 
   else:
@@ -135,13 +144,14 @@ def create_n_gram(sequence, n):
 
   return ngram + create_n_gram(sequence, n - 1)
 
-
+# count the number of times each n-gram appears in the session and make it as a vector
 def ngrams_to_vectors(n_gram_1, concatenated_set):
   counter_ngram_1 = Counter(n_gram_1)
   n_gram_vec_1 = np.asarray([(counter_ngram_1[n]) for n in concatenated_set])
 
   return n_gram_vec_1
 
+# create the set of n-grams from all n-grams in all sessions
 def generate_n_grams(sequences, n = 5):
   ngrams = [create_n_gram(seq, n) for seq in sequences]
 
@@ -149,6 +159,7 @@ def generate_n_grams(sequences, n = 5):
 
   return ngrams, concat_set
 
+# compute the modularity scores of the clustering results
 def modularity(clusters, distances, m):
   num_clusters = len(clusters)
   # print(clusters)
@@ -167,9 +178,13 @@ def modularity(clusters, distances, m):
 
   return modularity
 
+# computes the polar distance between two vectors
 def compute_polar_distance(n_gram_vec_1, n_gram_vec_2):
   distance = 2 * np.arccos((np.dot(n_gram_vec_1, n_gram_vec_2) / np.sqrt(np.dot(n_gram_vec_1, n_gram_vec_1) * np.dot(n_gram_vec_2, n_gram_vec_2)))) / np.pi
   return distance
+
+# Helper functions for extracting the distinguishing features from the clusters
+# adopted from https://sandlab.cs.uchicago.edu/clickstream/index.html
 
 def getHalfPoint(scores):
 	values = [x[1] for x in scores]
@@ -230,6 +245,8 @@ def LMethod(evalResults):
 		print(('minCutoff is None', evalResults))
 	return evalResults[minCutoff][0]
 
+
+# divisivie hierarchical clustering of the sessions, based on the similarity of the n-gram occurrence vectors
 def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
   vectors = np.asarray([ngrams_to_vectors(ngram, concatenated_set=concat_set) for idx, ngram in enumerate(ngrams) if idx in target])
 
@@ -263,10 +280,10 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
     idx = -1
     max_cluster_size = 0
     max_diameter = 0
-    for key, cluster in clusters_info.items():
+    for key, cluster in clusters_info.items(): # find the cluster with the largest size
       # if cluster["diameter"] < 0.05:
       #   cluster["type"] = 'Leaf'
-      if cluster["cluster_size"] < min(MIN_CLUSTER_SIZE, 0.1 * len_vectors):
+      if cluster["cluster_size"] < min(MIN_CLUSTER_SIZE, 0.1 * len_vectors): # if the cluster is too small, it is a leaf cluster and we can stop
         cluster["type"] = 'Leaf'
       if cluster["cluster_size"] > max_cluster_size and cluster["type"] == 'Tree' and cluster["children"] is None:
         idx = key    
@@ -290,6 +307,7 @@ def divisive_clustering(ngrams, concat_set, n_clusters, k, target = []):
 
   return clusters, distinguishing_features, vectors, clusters_info
 
+# divide the cluster into two clusters
 def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id, whole_distances, k, len_vectors):
 
   myLogger.info('Dividing cluster %d' % cluster_id)
@@ -300,12 +318,13 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   selected_vector_size = len(selected_vector_idx)
   selected_vectors = vectors[selected_vector_idx].copy()
   # selected_vectors[:, distinguishing_features[cluster_id]] = 0
-  selected_vectors[:, distinguishing_feature] = 0
+  selected_vectors[:, distinguishing_feature] = 0 # remove the distinguishing feature from the selected vectors to avoid the influence of the feature on the clustering result
 
   # print(distinguishing_features[cluster_id])
 
   distances = np.zeros((selected_vector_size, selected_vector_size))
 
+  # compute the distances between the selected vectors without the distinguishing features
   if cluster_id == 1:
     distances = whole_distances
   else:
@@ -333,6 +352,8 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
 
   mask[np.argmax(np.average(distances, axis = 1))] = False
   # print(np.argmax(np.average(distances, axis = 1)))
+
+  # select sessions that are farthest from the rest of the sessions
   while True:
     avg_distance_to_splinters = np.average(distances[:, ~mask], axis=1)
 
@@ -355,12 +376,16 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   in_clusters = selected_vector_idx[~mask]
   out_clusters = selected_vector_idx[mask]
 
+  # if divided clusters are too small, they are leaf clusters and we can stop
   if (in_clusters.size < max(min(MIN_CLUSTER_SIZE, 0.1 * len_vectors), 2)) or (out_clusters.size < max(min(MIN_CLUSTER_SIZE, 0.1 * len_vectors), 2)):
     clusters_info[cluster_id]['type'] = 'Leaf'
     return
 
+  # assign unique id to the new clusters
   in_cluster_id = max(clusters_info.keys()) + 1
   out_cluster_id = max(clusters_info.keys()) + 2
+
+  # update the clusters_info to store the new clusters
 
   clusters_info[cluster_id]["in_cluster_id"] = in_cluster_id
   clusters_info[cluster_id]["out_cluster_id"] = out_cluster_id
@@ -374,6 +399,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
 
   # contingency_table = np.asarray([np.sum(splinter_cluster, axis=0), np.sum(remaining_cluster, axis=0)])
 
+  # for each cluster, compute the distinguishing features by selecting the features that are the frequently occurring in the inner cluster but not in the outer cluster with chi2 score
   max_chisq = 0
   max_idx = 0
   chisqs = []
@@ -410,9 +436,12 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
   # print(res)
   # print(cutoff_features)
 
+  # update the distinguishing_features to store the new distinguishing features
+
   distinguishing_features[in_cluster_id] = distinguishing_features[cluster_id] + [(in_cluster_id, cutoff_features)]
   distinguishing_features[out_cluster_id] = distinguishing_features[cluster_id] # + cutoff_features
 
+  # compute the diameters of the new clusters
   in_cluster_dist = whole_distances[np.ix_(in_clusters, in_clusters)]
   out_cluster_dist = whole_distances[np.ix_(out_clusters, out_clusters)]
 
@@ -565,6 +594,7 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
 
 # topics, prob = topic_model.fit_transform(query_text)
 
+# load data from create_keyword_clusters.py
 
 with open('BERTopics-cluster-50000-50-new.json', 'r') as f:
   all_topics = json.load(f)
@@ -579,12 +609,11 @@ with open('sequences-50000-new.json', 'r') as f:
 
 # Sample from sequences
 
-SAMPLE_SIZE = 7500
-OUTLIER_SIZE = 500 #int(SAMPLE_SIZE * 0.1)
+SAMPLE_SIZE = 7500 # number of sessions to sample
+OUTLIER_SIZE = 500 #int(SAMPLE_SIZE * 0.1) # number of outliers (sessions without any topic) to sample
 VALID_SIZE = SAMPLE_SIZE - OUTLIER_SIZE
 
-
-valid_cluster_ids = [1, 2, 3, 4, 5, 6, 7, 9, 14, 16, 17, 19, 20, 22, 24, 25, 27, 28, 31, 33, 35, 36, 38, 39, 40, 41, 42, 43, 45, 47, 48, 49, 50, 52, 53, 55, 56, 58, 59, 61, 65, 68, 69, 74, 76, 79]
+valid_cluster_ids = [1, 2, 3, 4, 5, 6, 7, 9, 14, 16, 17, 19, 20, 22, 24, 25, 27, 28, 31, 33, 35, 36, 38, 39, 40, 41, 42, 43, 45, 47, 48, 49, 50, 52, 53, 55, 56, 58, 59, 61, 65, 68, 69, 74, 76, 79] # list of user query cluster ids used in the dashboard
 
 # sequences = flatten_logs(json_seqs)
 
@@ -611,8 +640,8 @@ clusters_info_dict = {}
 
 # %%
 
-for k in [20]:
-  for n in range(3, 4):
+for k in [20]: # adjust this to change the number of maximum number of distinguishing features
+  for n in range(3, 4): # adjust this to change the length of ngrams
     
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
     for j in set(topics):
@@ -648,6 +677,8 @@ for k in [20]:
       #     f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
       #     f.write("\n")
 
+      # save behavior clusters as json file
+
       with open(f'cluster-info-{n}-{k}.json', 'a') as f:
         tree = {
           "root_id": 1,
@@ -681,7 +712,7 @@ for k in [20]:
         label_divisive = clusters_dict[n][idx]
         random_seqs[i]["ClusterID"] = int(label_divisive)
 
-
+    # save the session information as json file
     with open(f'sequences-{n}-{k}.json', 'w') as f:
       json.dump(random_seqs, f, ensure_ascii=True, indent = 2)
 
