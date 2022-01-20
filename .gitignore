@@ -4,3 +4,7 @@ aol/*
 *.zip
 .DS_Store
 .python-version
+*.txt
+*.pyc
+*.json
+*.log
