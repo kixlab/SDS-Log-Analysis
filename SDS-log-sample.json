@@ -1,0 +1,514 @@
+{
+  "took": 0, 
+  "timed_out": false,
+  "_shards": { "total": 1, "successful": 1, "skipped": 0, "failed": 0 },
+  "hits": {
+    "total": { "value": 3, "relation": "eq" },
+    "max_score": 1.0,
+    "hits": [
+      {
+        "_index": "search_section_2022-01-01", 
+        "_type": "_doc",
+        "_id": "index1",
+        "_score": 1.0,
+        "_source": {
+          "session_id": "session_id1",
+          "user_id": "user_id1",
+          "query": {
+            "timestamp": "2022-01-01 00:00:01",
+            "keyword": "키워드1",
+            "extend_keyword": "확장 키워드1",
+            "from": { 
+              "item_name": "rel_search_keyword",
+              "item_context": { "req": "1", "keyword": "연관검색어1" }
+            }
+          },
+          "doc_result": { 
+            "total_cnt": 60,
+            "documents": [{
+              "id": "id1",
+              "seq": 1,
+              "score": "2.998679413972792",
+              "board": "board1",
+              "url": "url1",
+              "title": "제목1",
+              "context": "내용1" 
+            },
+            {
+              "id": "id2",
+              "seq": 2,
+              "score": "2.4694867463378194",
+              "board": "board2",
+              "url": "url2",
+              "title": "제목2",
+              "context": "내용2"
+            },
+            {
+              "id": "id3",
+              "seq": 3,
+              "score": "2.463853563782616",
+              "board": "board3",
+              "url": "url3",
+              "title": "제목3",
+              "context": "내용3"
+            },
+            {
+              "id": "id4",
+              "seq": 4,
+              "score": "2.393819239250004",
+              "board": "board4",
+              "url": "url4",
+              "title": "제목4",
+              "context": "내용4"
+            },
+            {
+              "id": "id5",
+              "seq": 5,
+              "score": "2.392682700529163",
+              "board": "board5",
+              "url": "url5",
+              "title": "제목5",
+              "context": "내용5"
+            },
+            {
+              "id": "id6",
+              "seq": 6,
+              "score": "2.186223136054805",
+              "board": "board6",
+              "url": "url6",
+              "title": "제목6",
+              "context": "내용6"
+            },
+            {
+              "id": "id7",
+              "seq": 7,
+              "score": "2.1862145379548417",
+              "board": "board7",
+              "url": "url7",
+              "title": "제목7",
+              "context": "내용7"
+            },
+            {
+              "id": "id8",
+              "seq": 8,
+              "score": "2.182497022649719",
+              "board": "board8",
+              "url": "url8",
+              "title": "제목8",
+              "context": "내용8"
+            },
+            {
+              "id": "id9",
+              "seq": 9,
+              "score": "2.1815557745608727",
+              "board": "board9",
+              "url": "url9",
+              "title": "제목9",
+              "context": "내용9"
+            },
+            {
+              "id": "id10",
+              "seq": 10,
+              "score": "2.1805964299849125",
+              "board": "board10",
+              "url": "url10",
+              "title": "제목10",
+              "context": "내용10"
+            }]
+          },
+          "item": {
+            "quick_link": {
+              "total_cnt": 1,
+              "result": [{
+                "req": 1,
+                "match_keyword": ["퀵링크키워드1"],
+                "source": "source1",
+                "title": "title1",
+                "link": "link1"
+              }]
+            },
+            "rel_search_keyword": {
+              "total_cnt": 6,
+              "result": [{ "req": 1, "keyword": "연관검색어1" },
+              { "req": 2, "keyword": "연관검색어2" },
+              { "req": 3, "keyword": "연관검색어3" },
+              { "req": 4, "keyword": "연관검색어4" },
+              { "req": 5, "keyword": "연관검색어5" },
+              { "req": 6, "keyword": "연관검색어6" }]
+            }
+          },
+          "last_commit_datetime": "2022-01-01 00:00:01",
+          "actions": [{
+            "timestamp": "2022-01-01 00:00:02",
+            "action_type": "select_doc", 
+            "stay_time_sec": 100,
+            "argument": {
+              "target_doc_id": "id1",
+              "target_doc_seq": 1,
+              "target_doc_score": "2.4694867463378194",
+              "target_doc_board": "board1",
+              "target_doc_url": "url1",
+              "target_doc_title": "제목1",
+              "target_doc_context": "내용1"
+            }
+          }],
+          "evaluation": { "score": null, "comment": null }, 
+          "summary": {
+            "prev_query_keyword": "이전검색어", 
+            "next_query_keyword": "다음검색어", 
+            "is_empty_result": false,
+            "is_empty_doc_result": false,
+            "is_empty_rel_search_keyword_result": false,
+            "is_empty_quick_link_result": false,
+            "is_select_doc": false, 
+            "is_select_top5_doc": true,
+            "is_select_rel_search_keyword": false,
+            "is_select_quick_link": true,
+            "total_hit_cnt": 1,
+            "doc_hit_cnt": 1,
+            "quick_link_hit_cnt": 1,
+            "doc_avg_hit_seq": 0,
+            "total_stay_sec": 100,
+            "total_stay_doc_sec": 100,
+            "total_stay_quick_link_sec": 0
+          }
+        }
+      },
+      {
+        "_index": "search_section_2022-01-01",
+        "_type": "_doc",
+        "_id": "index1",
+        "_score": 1.0,
+        "_source": {
+          "session_id": "session_id1",
+          "user_id": "user_id1",
+          "query": {
+            "timestamp": "2022-01-01 00:00:01",
+            "keyword": "키워드1",
+            "extend_keyword": "확장 키워드1",
+            "from": {
+              "item_name": "rel_search_keyword",
+              "item_context": { "req": "1", "keyword": "연관검색어1" }
+            }
+          },
+          "doc_result": {
+            "total_cnt": 60,
+            "documents": [{
+              "id": "id1",
+              "seq": 1,
+              "score": "2.998679413972792",
+              "board": "board1",
+              "url": "url1",
+              "title": "제목1",
+              "context": "내용1"
+            },
+            {
+              "id": "id2",
+              "seq": 2,
+              "score": "2.4694867463378194",
+              "board": "board2",
+              "url": "url2",
+              "title": "제목2",
+              "context": "내용2"
+            },
+            {
+              "id": "id3",
+              "seq": 3,
+              "score": "2.463853563782616",
+              "board": "board3",
+              "url": "url3",
+              "title": "제목3",
+              "context": "내용3"
+            },
+            {
+              "id": "id4",
+              "seq": 4,
+              "score": "2.393819239250004",
+              "board": "board4",
+              "url": "url4",
+              "title": "제목4",
+              "context": "내용4"
+            },
+            {
+              "id": "id5",
+              "seq": 5,
+              "score": "2.392682700529163",
+              "board": "board5",
+              "url": "url5",
+              "title": "제목5",
+              "context": "내용5"
+            },
+            {
+              "id": "id6",
+              "seq": 6,
+              "score": "2.186223136054805",
+              "board": "board6",
+              "url": "url6",
+              "title": "제목6",
+              "context": "내용6"
+            },
+            {
+              "id": "id7",
+              "seq": 7,
+              "score": "2.1862145379548417",
+              "board": "board7",
+              "url": "url7",
+              "title": "제목7",
+              "context": "내용7"
+            },
+            {
+              "id": "id8",
+              "seq": 8,
+              "score": "2.182497022649719",
+              "board": "board8",
+              "url": "url8",
+              "title": "제목8",
+              "context": "내용8"
+            },
+            {
+              "id": "id9",
+              "seq": 9,
+              "score": "2.1815557745608727",
+              "board": "board9",
+              "url": "url9",
+              "title": "제목9",
+              "context": "내용9"
+            },
+            {
+              "id": "id10",
+              "seq": 10,
+              "score": "2.1805964299849125",
+              "board": "board10",
+              "url": "url10",
+              "title": "제목10",
+              "context": "내용10"
+            }]
+          },
+          "item": {
+            "quick_link": {
+              "total_cnt": 1,
+              "result": [{
+                "req": 1,
+                "match_keyword": ["퀵링크키워드1"],
+                "source": "source1",
+                "title": "title1",
+                "link": "link1"
+              }]
+            },
+            "rel_search_keyword": {
+              "total_cnt": 6,
+              "result": [{ "req": 1, "keyword": "연관검색어1" },
+              { "req": 2, "keyword": "연관검색어2" },
+              { "req": 3, "keyword": "연관검색어3" },
+              { "req": 4, "keyword": "연관검색어4" },
+              { "req": 5, "keyword": "연관검색어5" },
+              { "req": 6, "keyword": "연관검색어6" }]
+            }
+          },
+          "last_commit_datetime": "2022-01-01 00:00:01",
+          "actions": [{
+            "timestamp": "2022-01-01 00:00:02",
+            "action_type": "select_doc",
+            "stay_time_sec": 100,
+            "argument": {
+              "target_doc_id": "id1",
+              "target_doc_seq": 1,
+              "target_doc_score": "2.4694867463378194",
+              "target_doc_board": "board1",
+              "target_doc_url": "url1",
+              "target_doc_title": "제목1",
+              "target_doc_context": "내용1"
+            }
+          }],
+          "evaluation": { "score": null, "comment": null },
+          "summary": {
+            "prev_query_keyword": "이전검색어",
+            "next_query_keyword": "다음검색어",
+            "is_empty_result": false,
+            "is_empty_doc_result": false,
+            "is_empty_rel_search_keyword_result": false,
+            "is_empty_quick_link_result": false,
+            "is_select_doc": false,
+            "is_select_top5_doc": true,
+            "is_select_rel_search_keyword": false,
+            "is_select_quick_link": true,
+            "total_hit_cnt": 1,
+            "doc_hit_cnt": 1,
+            "quick_link_hit_cnt": 1,
+            "doc_avg_hit_seq": 0,
+            "total_stay_sec": 100,
+            "total_stay_doc_sec": 100,
+            "total_stay_quick_link_sec": 0
+          }
+        }
+      },
+      {
+        "_index": "search_section_2022-01-01",
+        "_type": "_doc",
+        "_id": "index1",
+        "_score": 1.0,
+        "_source": {
+          "session_id": "session_id1",
+          "user_id": "user_id1",
+          "query": {
+            "timestamp": "2022-01-01 00:00:01",
+            "keyword": "키워드1",
+            "extend_keyword": "확장 키워드1",
+            "from": {
+              "item_name": "rel_search_keyword",
+              "item_context": { "req": "1", "keyword": "연관검색어1" }
+            }
+          },
+          "doc_result": {
+            "total_cnt": 60,
+            "documents": [{
+              "id": "id1",
+              "seq": 1,
+              "score": "2.998679413972792",
+              "board": "board1",
+              "url": "url1",
+              "title": "제목1",
+              "context": "내용1"
+            },
+            {
+              "id": "id2",
+              "seq": 2,
+              "score": "2.4694867463378194",
+              "board": "board2",
+              "url": "url2",
+              "title": "제목2",
+              "context": "내용2"
+            },
+            {
+              "id": "id3",
+              "seq": 3,
+              "score": "2.463853563782616",
+              "board": "board3",
+              "url": "url3",
+              "title": "제목3",
+              "context": "내용3"
+            },
+            {
+              "id": "id4",
+              "seq": 4,
+              "score": "2.393819239250004",
+              "board": "board4",
+              "url": "url4",
+              "title": "제목4",
+              "context": "내용4"
+            },
+            {
+              "id": "id5",
+              "seq": 5,
+              "score": "2.392682700529163",
+              "board": "board5",
+              "url": "url5",
+              "title": "제목5",
+              "context": "내용5"
+            },
+            {
+              "id": "id6",
+              "seq": 6,
+              "score": "2.186223136054805",
+              "board": "board6",
+              "url": "url6",
+              "title": "제목6",
+              "context": "내용6"
+            },
+            {
+              "id": "id7",
+              "seq": 7,
+              "score": "2.1862145379548417",
+              "board": "board7",
+              "url": "url7",
+              "title": "제목7",
+              "context": "내용7"
+            },
+            {
+              "id": "id8",
+              "seq": 8,
+              "score": "2.182497022649719",
+              "board": "board8",
+              "url": "url8",
+              "title": "제목8",
+              "context": "내용8"
+            },
+            {
+              "id": "id9",
+              "seq": 9,
+              "score": "2.1815557745608727",
+              "board": "board9",
+              "url": "url9",
+              "title": "제목9",
+              "context": "내용9"
+            },
+            {
+              "id": "id10",
+              "seq": 10,
+              "score": "2.1805964299849125",
+              "board": "board10",
+              "url": "url10",
+              "title": "제목10",
+              "context": "내용10"
+            }]
+          },
+          "item": {
+            "quick_link": {
+              "total_cnt": 1,
+              "result": [{
+                "req": 1,
+                "match_keyword": ["퀵링크키워드1"],
+                "source": "source1",
+                "title": "title1",
+                "link": "link1"
+              }]
+            },
+            "rel_search_keyword": {
+              "total_cnt": 6,
+              "result": [{ "req": 1, "keyword": "연관검색어1" },
+              { "req": 2, "keyword": "연관검색어2" },
+              { "req": 3, "keyword": "연관검색어3" },
+              { "req": 4, "keyword": "연관검색어4" },
+              { "req": 5, "keyword": "연관검색어5" },
+              { "req": 6, "keyword": "연관검색어6" }]
+            }
+          },
+          "last_commit_datetime": "2022-01-01 00:00:01",
+          "actions": [{
+            "timestamp": "2022-01-01 00:00:02",
+            "action_type": "select_doc",
+            "stay_time_sec": 100,
+            "argument": {
+              "target_doc_id": "id1",
+              "target_doc_seq": 1,
+              "target_doc_score": "2.4694867463378194",
+              "target_doc_board": "board1",
+              "target_doc_url": "url1",
+              "target_doc_title": "제목1",
+              "target_doc_context": "내용1"
+            }
+          }],
+          "evaluation": { "score": null, "comment": null },
+          "summary": {
+            "prev_query_keyword": null,
+            "next_query_keyword": null,
+            "is_empty_result": false,
+            "is_empty_doc_result": false,
+            "is_empty_rel_search_keyword_result": false,
+            "is_empty_quick_link_result": false,
+            "is_select_doc": false,
+            "is_select_top5_doc": true,
+            "is_select_rel_search_keyword": false,
+            "is_select_quick_link": true,
+            "total_hit_cnt": 1,
+            "doc_hit_cnt": 1,
+            "quick_link_hit_cnt": 1,
+            "doc_avg_hit_seq": 0,
+            "total_stay_sec": 100,
+            "total_stay_doc_sec": 100,
+            "total_stay_quick_link_sec": 0
+          }
+        }
+      }]
+  }
+}
