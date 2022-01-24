@@ -1,80 +1,12 @@
 # %%
 
 import json
-import math
 from typing import List
 from datetime import datetime
 from konlpy.tag import Okt
-import pickle
-
+from bertopic import BERTopic
+import numpy as np
 okt = Okt()
-
-# %%
-
-class Base:
-  def __init__(self, sessionId: str, userId: str, time: str, eventName: str):
-    self.eventName = ''
-    self.sessionId = sessionId
-    self.userId = userId
-    self.time = datetime.fromisoformat(time)
-
-class Session:
-  def __init__(self, sessionId: str, userId: str, metrics: dict, sequence: List[Base]):
-    self.sessionId = sessionId
-    self.userId = userId
-    self.metrics = metrics
-    self.sequence = sequence
-    self.BERTopicKeywordCluster = -1
-    self.ClusterID = -1
-
-class Query(Base):
-  def __init__(self, query: str, summary: dict, queryResults: List[dict], sessionId: str, userId: str, isRelated: bool, time: str, extendedQuery: str, previousQuery: str):
-    self.query = query
-    self.queryResults = queryResults
-    self.summary = summary
-    self.isRelated = isRelated
-    self.extendedQuery = extendedQuery
-    self.isRefined = isReformulated(query, previousQuery)
-    super().__init__(sessionId = sessionId, userId = userId, time = time, eventName = 'Query')
-
-  def setIntermediateMetrics(self, metrics: dict):
-    self.intermediateMetrics = metrics
-
-
-class Click(Base):
-  def __init__(self, data: dict, sessionId: str, userId: str, query: str):
-    self.query = query
-    self.target_doc_url = data['argument']['target_doc_url']
-    self.target_doc_seq = data['argument']['target_doc_seq']
-    self.target_doc_title = data['argument']['target_doc_title']
-    self.target_doc_context = data['argument']['target_doc_context']
-    self.stay_time_sec = data['stay_time_sec']
-
-    super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], eventName='Click')
-
-class ClickQuickLink(Base):
-  def __init__(self, data: dict, sessionId: str, userId: str, query: str):
-    self.query = query
-    self.req = data['argument']['req']
-    self.match_keyword = data['argument']['match_keyword']
-    self.source = data['argument']['source']
-    self.title = data['argument']['title']
-
-    super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], eventName='ClickQuickLink')
-
-class EndSession(Base):
-
-  def __init__(self, data: dict, sessionId: str, userId: str, query: str):
-    self.query = query
-    self.by = data['argument']['by']
-    super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], eventName='EndSession')
-
-class Session:
-  def __init__(self, sessionId: str, userId: str, sequence: List[Base], metrics: dict):
-    self.sessionId = sessionId
-    self.userId = userId
-    self.sequence = sequence
-    self.metrics = metrics
 
 # %%
 def isReformulated(query: str, prev_query: str):
@@ -89,7 +21,7 @@ def isReformulated(query: str, prev_query: str):
   prev_query_nouns = set(okt.nouns(prev_query))
 
   union = query_nouns.union(prev_query_nouns)
-  intersect = query_nouns.intersect(prev_query_nouns)
+  intersect = query_nouns.intersection(prev_query_nouns)
 
   return len(intersect) / len(union) > 0.5
 
@@ -104,15 +36,6 @@ def process_action(action: dict, sessionId: str, userId: str, query: str):
     return EndSession(data = action, sessionId = sessionId, userId = userId, query = query)
   else:
     raise Exception(f'Unknown action type: {action["action_type"]}')
-
-
-# def compute_stats(session: List[Base]):
-
-#   total_queries = [e for e in session if isinstance(e, Query)]
-
-#   total_query_count = len(total_queries)
-
-#   abandoned_query_count = len([q for q in total_queries if (q.summary['is_select_doc'] == False and q.summary['is_select_top5_doc'] == False)])
 
 def levenshtein(s1, s2, cost=None, debug=False): 
   # adopted from https://lovit.github.io/nlp/2018/08/28/levenshtein_hangle/
@@ -188,7 +111,7 @@ def compose(chosung, jungsung, jongsung):
 
 def decompose(c):
   if not character_is_korean(c):
-    return None
+    return c
   i = ord(c)
   if (jaum_begin <= i <= jaum_end):
     return (c, ' ', ' ')
@@ -237,6 +160,128 @@ def jamo_levenshtein(s1, s2, debug=False):
 
   return previous_row[-1]
 
+
+# %%
+
+class Base:
+  def __init__(self, sessionId: str, userId: str, time: str, Type: str):
+    self.Type = Type
+    self.sessionId = sessionId
+    self.userId = userId
+    self.time = datetime.fromisoformat(time)
+
+  def reprJSON(self):
+    return self.__dict__
+
+class Session:
+  def __init__(self, sessionId: str, userId: str, metrics: dict, sequence: List[Base]):
+    self.sessionId = sessionId
+    self.userId = userId
+    self.metrics = metrics
+    self.sequence = sequence
+    self.BERTopicsKeywordCluster = -1
+    self.ClusterID = -1
+
+  def reprJSON(self):
+    temp = {
+      "SessionNum": self.sessionId,
+      "UserID": self.userId,
+      "ClusterID": self.ClusterID,
+      "BERTopicsKeywordCluster": self.BERTopicsKeywordCluster,
+      "Sequence": self.sequence,
+    }
+
+    temp |= self.metrics
+
+    return temp
+
+  def extract_queries(self):
+    queries = [e for e in self.sequence if isinstance(e, Query)]
+    return ' '.join([e.query for e in queries])
+
+class Query(Base):
+  def __init__(self, query: str, summary: dict, queryResults: List[dict], sessionId: str, userId: str, isRelated: bool, time: str, extendedQuery: str, previousQuery: str):
+    self.query = query
+    self.queryResults = queryResults
+    self.summary = summary
+    self.isRelated = isRelated
+    self.extendedQuery = extendedQuery
+    self.isRefined = isReformulated(query, previousQuery)
+    eventName = 'RefinedQuery' if self.isRefined else 'NewQuery'
+    super().__init__(sessionId = sessionId, userId = userId, time = time, Type = eventName)
+
+  def setIntermediateMetrics(self, metrics: dict):
+    self.intermediateMetrics = metrics
+
+
+class Click(Base):
+  def __init__(self, data: dict, sessionId: str, userId: str, query: str):
+    self.Query = query
+    self.target_doc_url = data['argument']['target_doc_url']
+    self.target_doc_seq = data['argument']['target_doc_seq']
+    self.target_doc_title = data['argument']['target_doc_title']
+    self.target_doc_context = data['argument']['target_doc_context']
+    self.stay_time_sec = data['stay_time_sec']
+
+    eventName = ''
+
+    if self.target_doc_seq < 6:
+      eventName = 'Click1-5'
+    elif self.target_doc_seq < 11:
+      eventName = 'Click6-10'
+    else:
+      eventName = 'Click11+'
+
+    if self.stay_time_sec < 30:
+      eventName += '_Short'
+
+    super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], Type = eventName)
+
+  def reprJSON(self):
+    return {
+      "Query": self.Query,
+      "ClickedURL": self.target_doc_url,
+      "Rank": self.target_doc_seq,
+      "ClickedTitle": self.target_doc_title,
+      "ClickedContext": self.target_doc_context,
+      "DwellTime": self.stay_time_sec,
+      "Type": self.Type,
+    }
+
+class ClickQuickLink(Base):
+  def __init__(self, data: dict, sessionId: str, userId: str, query: str):
+    self.query = query
+    self.req = data['argument']['req']
+    self.match_keyword = data['argument']['match_keyword']
+    self.source = data['argument']['source']
+    self.title = data['argument']['title']
+
+    super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], Type='ClickQuickLink')
+
+class EndSession(Base):
+
+  def __init__(self, data: dict, sessionId: str, userId: str, query: str):
+    self.query = query
+    self.by = data['argument']['by']
+
+    super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], Type='EndSession')
+
+
+
+class ComplexEncoder(json.JSONEncoder):
+  def default(self, obj):
+    if isinstance(obj, Base):
+      return obj.reprJSON()
+    elif isinstance(obj, Session):
+      return obj.reprJSON()
+    elif isinstance(obj, datetime):
+      return obj.isoformat()
+    else:
+      return json.JSONEncoder.default(self, obj)
+
+
+# %%
+
 def compute_intermediate_metrics(queryEvent: Query, clickEvents: List[Base]):
   reciprocal_ranks = [(1 / c.target_doc_seq) for c in clickEvents if isinstance(c, Click)]
 
@@ -248,10 +293,10 @@ def compute_intermediate_metrics(queryEvent: Query, clickEvents: List[Base]):
   isClickTop5 = queryEvent.summary['is_select_top5_doc']
 
   return {
-    meanRR: meanRR,
-    maxRR: maxRR,
-    isAbandoned: isAbandoned,
-    isClickTop5: isClickTop5
+    'meanRR': meanRR,
+    'maxRR': maxRR,
+    'isAbandoned': isAbandoned,
+    'isClickTop5': isClickTop5
   }
 
 def compute_stats(session: List[Base]):
@@ -263,22 +308,40 @@ def compute_stats(session: List[Base]):
   maxRR = sum([q.intermediateMetrics['maxRR'] for q in queryEvents if q.intermediateMetrics['maxRR'] > 0]) / len([q.intermediateMetrics['maxRR'] for q in queryEvents if q.intermediateMetrics['maxRR'] > 0])
   
   abandonmentRate = len([q for q in queryEvents if q.intermediateMetrics['isAbandoned']]) / totalQueryCount
-  reformualtionRate = len([q for q in queryEvents if q.intermediateMetrics['isReformulated']]) / totalQueryCount
+  reformulationRate = len([q for q in queryEvents if q.isRefined]) / totalQueryCount
   clickTop5Rate = len([q for q in queryEvents if q.intermediateMetrics['isClickTop5']]) / totalQueryCount
 
   return {
-    meanRR: meanRR,
-    maxRR: maxRR,
-    abandonmentRate: abandonmentRate,
-    reformualtionRate: reformualtionRate,
-    clickTop5Rate: clickTop5Rate
+    'meanRR': meanRR,
+    'maxRR': maxRR,
+    'abandonmentRate': abandonmentRate,
+    'reformulationRate': reformulationRate,
+    'clickTop5Rate': clickTop5Rate
   }
 
-  
+
+def assign_cluster_id(sessions: List[Session]):
+  topic_model = BERTopic(embedding_model = 'distiluse-base-multilingual-cased-v1')
+
+  queries = [s.extract_queries() for s in sessions]
+
+  topics, prob = topic_model.fit_transform(queries)
+  topics = np.asarray(topics)
+  all_topics = topic_model.get_topics()
+
+  for i in range(len(topics)):
+    sessions[i].BERTopicsKeywordCluster = int(topics[i])
+
+  with open('BERTopics-clusters.json', 'w') as f:
+    json.dump(all_topics, f, ensure_ascii=False, indent = 2)
+
+
 
 # %%
 
-with open('./SDS-log-sample.json', 'r') as f:
+# %%
+
+with open('./SDS-log-sample-new.json', 'r') as f:
   data = json.load(f)
 
 hits = data['hits']['hits']
@@ -305,7 +368,8 @@ for sessionId in sessionIds:
       summary = entry['_source']['summary'],
       time = entry['_source']['query']['timestamp'],
       isRelated = entry['_source']['query']['from'] is not None,
-      extendedQuery = entry['_source']['query']['extend_keyword']
+      extendedQuery = entry['_source']['query']['extend_keyword'],
+      previousQuery=entry['_source']['summary']['prev_query_keyword']
     )
     events.append(queryEvent)
 
@@ -335,7 +399,18 @@ for sessionId in sessionIds:
 
 
 
+sessions_total = sessions_total * 1000
+assign_cluster_id(sessions_total)
 
+# %%
+print(sessions_total[0].sequence)
+# %%
 
+sessions_total[0].sequence[0].__dict__
 
+# %%
+
+string = json.dumps(sessions_total, cls=ComplexEncoder, ensure_ascii=False)
+print(string)
+print('done')
 # %%

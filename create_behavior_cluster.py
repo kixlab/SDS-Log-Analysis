@@ -54,7 +54,6 @@ if __name__ == '__main__':
 def flatten_logs(sequences_list):
   
   result =  [[a["Type"] for a in s["Sequence"]] for s in sequences_list]
-  result.append("Empty")
 
   return result
 

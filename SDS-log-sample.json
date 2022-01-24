@@ -16,7 +16,7 @@
           "user_id": "user_id1",
           "query": {
             "timestamp": "2022-01-01 00:00:01",
-            "keyword": "키워드1",
+            "keyword": "키워드 검색어",
             "extend_keyword": "확장 키워드1",
             "from": { 
               "item_name": "rel_search_keyword",
