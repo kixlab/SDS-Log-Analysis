@@ -8,6 +8,7 @@ from bertopic import BERTopic
 import numpy as np
 okt = Okt()
 
+TIME_GAP_INTO_EVENT = True
 # %%
 def isReformulated(query: str, prev_query: str):
 
@@ -208,6 +209,9 @@ class Query(Base):
     self.extendedQuery = extendedQuery
     self.isRefined = isReformulated(query, previousQuery)
     eventName = 'RefinedQuery' if self.isRefined else 'NewQuery'
+    if TIME_GAP_INTO_EVENT:
+      if self.summary['total_stay_sec'] < 30:
+        eventName += '_Short'
     super().__init__(sessionId = sessionId, userId = userId, time = time, Type = eventName)
 
   def setIntermediateMetrics(self, metrics: dict):
@@ -248,8 +252,9 @@ class Click(Base):
     else:
       eventName = 'Click11+'
 
-    if self.stay_time_sec < 30:
-      eventName += '_Short'
+    if TIME_GAP_INTO_EVENT:
+      if self.stay_time_sec < 30:
+        eventName += '_Short'
 
     super().__init__(sessionId = sessionId, userId = userId, time = data['timestamp'], Type = eventName)
 
@@ -301,6 +306,8 @@ class ComplexEncoder(json.JSONEncoder):
 def compute_intermediate_metrics(queryEvent: Query, clickEvents: List[Base]):
   reciprocal_ranks = [(1 / c.target_doc_seq) for c in clickEvents if isinstance(c, Click)]
 
+  ranks = [c.target_doc_seq for c in clickEvents if isinstance(c, Click)]
+
   meanRR = (sum(reciprocal_ranks) / len(reciprocal_ranks)) if len(reciprocal_ranks) > 0 else 0
   maxRR = max(reciprocal_ranks) if len(reciprocal_ranks) > 0 else 0
 
@@ -308,11 +315,19 @@ def compute_intermediate_metrics(queryEvent: Query, clickEvents: List[Base]):
 
   isClickTop5 = queryEvent.summary['is_select_top5_doc']
 
+  dcg = np.sum([(1 / np.log2(r + 1)) for r in ranks])
+  idcg = np.sum([(1 / np.log2((i + 1) + 1)) for i in range(len(ranks))]) 
+  ndcg = dcg / idcg # Naive NDCG, without any consideration on clicks
+
+  pSkip = 1 - (len(set(ranks)) / max(ranks))
+
   return {
     'meanRR': meanRR,
     'maxRR': maxRR,
     'isAbandoned': isAbandoned,
-    'isClickTop5': isClickTop5
+    'isClickTop5': isClickTop5,
+    'NDCG': ndcg,
+    'pSkip': pSkip
   }
 
 def compute_stats(session: List[Base]):
@@ -326,18 +341,22 @@ def compute_stats(session: List[Base]):
   abandonmentRate = len([q for q in queryEvents if q.intermediateMetrics['isAbandoned']]) / totalQueryCount
   reformulationRate = len([q for q in queryEvents if q.isRefined]) / totalQueryCount
   clickTop5Rate = len([q for q in queryEvents if q.intermediateMetrics['isClickTop5']]) / totalQueryCount
-
+  ndcg = sum([q.intermediateMetrics['NDCG'] for q in queryEvents]) / len([q.intermediateMetrics['NDCG'] for q in queryEvents])
+  pSkip = sum([q.intermediateMetrics['pSkip'] for q in queryEvents]) / len([q.intermediateMetrics['pSkip'] for q in queryEvents])
   return {
-    'meanRR': meanRR,
-    'maxRR': maxRR,
-    'abandonmentRate': abandonmentRate,
-    'reformulationRate': reformulationRate,
-    'clickTop5Rate': clickTop5Rate
+    'MeanRR': meanRR,
+    'MaxRR': maxRR,
+    'AbandonmentRate': abandonmentRate,
+    'ReformulationRate': reformulationRate,
+    'Click@1-5': clickTop5Rate,
+    'NDCG': ndcg,
+    'pSkip': pSkip
   }
 
 
 def assign_cluster_id(sessions: List[Session]):
-  topic_model = BERTopic(embedding_model = 'distiluse-base-multilingual-cased-v1')
+  # topic_model = BERTopic(embedding_model = 'distiluse-base-multilingual-cased-v1')
+  topic_model = BERTopic(embedding_model = 'paraphrase-multilingual-mpnet-base-v2')
 
   queries = [s.extract_queries() for s in sessions]
 

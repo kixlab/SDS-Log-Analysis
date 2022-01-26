@@ -706,14 +706,14 @@ for k in [20]: # adjust this to change the number of maximum number of distingui
           }
           tree["nodes"].append(node)
 
-        json.dump(tree, f, ensure_ascii=True, indent = 2)
+        json.dump(tree, f, ensure_ascii=False, indent = 2)
       for idx, i in enumerate(idxs):
         label_divisive = clusters_dict[n][idx]
         random_seqs[i]["ClusterID"] = int(label_divisive)
 
     # save the session information as json file
     with open(f'sequences-{n}-{k}.json', 'w') as f:
-      json.dump(random_seqs, f, ensure_ascii=True, indent = 2)
+      json.dump(random_seqs, f, ensure_ascii=False, indent = 2)
 
 # %%
 
