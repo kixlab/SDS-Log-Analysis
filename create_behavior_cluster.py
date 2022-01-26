@@ -595,34 +595,34 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
 
 # load data from create_keyword_clusters.py
 
-with open('BERTopics-cluster-50000-50-new.json', 'r') as f:
+with open('BERTopics-clusters.json', 'r') as f:
   all_topics = json.load(f)
 
 # with open('KMeans-clusters.json', 'w') as f:
 #   json.dump(top_n_words, f, ensure_ascii=True, indent=2)
 
-with open('sequences-50000-new.json', 'r') as f:
+with open('keyword_cluster_sessions.json', 'r') as f:
   json_seqs = json.load(f)
 
 # %% 
 
 # Sample from sequences
 
-SAMPLE_SIZE = 7500 # number of sessions to sample
-OUTLIER_SIZE = 500 #int(SAMPLE_SIZE * 0.1) # number of outliers (sessions without any topic) to sample
-VALID_SIZE = SAMPLE_SIZE - OUTLIER_SIZE
+# SAMPLE_SIZE = 7500 # number of sessions to sample
+# OUTLIER_SIZE = 500 #int(SAMPLE_SIZE * 0.1) # number of outliers (sessions without any topic) to sample
+# VALID_SIZE = SAMPLE_SIZE - OUTLIER_SIZE
 
-valid_cluster_ids = [1, 2, 3, 4, 5, 6, 7, 9, 14, 16, 17, 19, 20, 22, 24, 25, 27, 28, 31, 33, 35, 36, 38, 39, 40, 41, 42, 43, 45, 47, 48, 49, 50, 52, 53, 55, 56, 58, 59, 61, 65, 68, 69, 74, 76, 79] # list of user query cluster ids used in the dashboard
+# valid_cluster_ids = [1, 2, 3, 4, 5, 6, 7, 9, 14, 16, 17, 19, 20, 22, 24, 25, 27, 28, 31, 33, 35, 36, 38, 39, 40, 41, 42, 43, 45, 47, 48, 49, 50, 52, 53, 55, 56, 58, 59, 61, 65, 68, 69, 74, 76, 79] # list of user query cluster ids used in the dashboard
 
-# sequences = flatten_logs(json_seqs)
+# # sequences = flatten_logs(json_seqs)
 
-outliers = [s for s in json_seqs if s['BERTopicsKeywordCluster'] == -1]
-valid_sequences = [s for s in json_seqs if s['BERTopicsKeywordCluster'] in valid_cluster_ids]
-random.seed(3)
-random_outliers = random.sample(outliers, k=OUTLIER_SIZE)
-random_valids = random.sample(valid_sequences, k=VALID_SIZE)
+# outliers = [s for s in json_seqs if s['BERTopicsKeywordCluster'] == -1]
+# valid_sequences = [s for s in json_seqs if s['BERTopicsKeywordCluster'] in valid_cluster_ids]
+# random.seed(3)
+# random_outliers = random.sample(outliers, k=OUTLIER_SIZE)
+# random_valids = random.sample(valid_sequences, k=VALID_SIZE)
 
-random_seqs = random_outliers + random_valids
+random_seqs = json_seqs # random_outliers + random_valids
 sequences = flatten_logs(random_seqs)
 
 topics = np.asarray([s['BERTopicsKeywordCluster'] for s in random_seqs])

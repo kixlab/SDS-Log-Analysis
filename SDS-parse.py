@@ -213,6 +213,22 @@ class Query(Base):
   def setIntermediateMetrics(self, metrics: dict):
     self.intermediateMetrics = metrics
 
+  def reprJSON(self):
+    temp = {
+      "Query": self.query,
+      "Type": self.Type,
+      "QueryResults": self.queryResults,
+      "Summary": self.summary,
+      "IsRelated": self.isRelated,
+      "ExtendedQuery": self.extendedQuery,
+      "IsRefined": self.isRefined,
+    }
+
+    if hasattr(self, 'intermediateMetrics'):
+      temp |= self.intermediateMetrics
+
+    return temp
+
 
 class Click(Base):
   def __init__(self, data: dict, sessionId: str, userId: str, query: str):
@@ -240,12 +256,12 @@ class Click(Base):
   def reprJSON(self):
     return {
       "Query": self.Query,
+      "Type": self.Type,
       "ClickedURL": self.target_doc_url,
       "Rank": self.target_doc_seq,
       "ClickedTitle": self.target_doc_title,
       "ClickedContext": self.target_doc_context,
       "DwellTime": self.stay_time_sec,
-      "Type": self.Type,
     }
 
 class ClickQuickLink(Base):
@@ -410,7 +426,10 @@ sessions_total[0].sequence[0].__dict__
 
 # %%
 
-string = json.dumps(sessions_total, cls=ComplexEncoder, ensure_ascii=False)
-print(string)
-print('done')
+# string = json.dumps(sessions_total, cls=ComplexEncoder, ensure_ascii=False)
+# print(string)
+# print('done')
+
+with open('keyword_cluster_sessions.json', 'w') as f:
+  json.dump(sessions_total, f, cls=ComplexEncoder, ensure_ascii=False, indent = 2)
 # %%
