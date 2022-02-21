@@ -6,20 +6,34 @@ from datetime import datetime
 from konlpy.tag import Okt
 from bertopic import BERTopic
 import numpy as np
+import re
 okt = Okt()
 
 TIME_GAP_INTO_EVENT = True
+
+# imported from https://gist.github.com/sebleier/554280
+stopwords_en = ["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"]
+regex_en = re.compile(r'[^a-zA-Z|\s]+')
+regex_ko = re.compile(r'[^ㄱ-ㅣ|가-힣|\s]+')
 # %%
+
+def extract_nouns(query: str):
+  query_en = regex_en.sub('', query)
+  query_ko = regex_ko.sub('', query)
+  query_nouns = okt.nouns(query_ko) + query_en.split()
+
+  return query_nouns
+
 def isReformulated(query: str, prev_query: str):
 
   if prev_query == None:
     return False
 
-  if jamo_levenshtein(query, prev_query) < 3:
+  if edit_distance(query, prev_query) < 3:
     return True
-  
-  query_nouns = set(okt.nouns(query))
-  prev_query_nouns = set(okt.nouns(prev_query))
+
+  query_nouns = set(extract_nouns(query))
+  prev_query_nouns = set(extract_nouns(prev_query))
 
   union = query_nouns.union(prev_query_nouns)
   intersect = query_nouns.intersection(prev_query_nouns)
@@ -161,6 +175,18 @@ def jamo_levenshtein(s1, s2, debug=False):
 
   return previous_row[-1]
 
+def edit_distance(s1, s2):
+  if len(s1) < len(s2):
+    return edit_distance(s2, s1)
+
+  if len(s2) == 0:
+    return len(s1)
+
+  decomposed_s1 = [comp for c in s1 for comp in decompose(c)]
+  decomposed_s2 = [comp for c in s2 for comp in decompose(c)]
+
+  return levenshtein(decomposed_s1, decomposed_s2)
+
 
 # %%
 
@@ -198,7 +224,7 @@ class Session:
 
   def extract_queries(self):
     queries = [e for e in self.sequence if isinstance(e, Query)]
-    return ' '.join([e.query for e in queries])
+    return ' '.join([' '.join(extract_nouns(e.query)) for e in queries])
 
 class Query(Base):
   def __init__(self, query: str, summary: dict, queryResults: List[dict], sessionId: str, userId: str, isRelated: bool, time: str, extendedQuery: str, previousQuery: str):
@@ -434,7 +460,7 @@ for sessionId in sessionIds:
 
 
 
-sessions_total = sessions_total * 1000
+sessions_total = sessions_total * 100
 assign_cluster_id(sessions_total)
 
 # %%
