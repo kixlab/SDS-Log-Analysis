@@ -643,73 +643,74 @@ for k in [20]: # adjust this to change the number of maximum number of distingui
   for n in range(3, 4): # adjust this to change the length of ngrams
     
     ngram_dict[n], concat_set_dict[n] = generate_n_grams(sequences, n = n)
-    for j in set(topics):
-      idxs = np.argwhere(topics == int(j)).flatten()
-      clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k, target = idxs)
-      try:
-        score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
-        myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
-      except:
-        myLogger.info("n-gram size: %f, silhouette score: %f" % (n, 0))
+    # for j in set(topics):
+    #   idxs = np.argwhere(topics == int(j)).flatten()
+    idxs = list(range(len(ngram_dict[n])))
+    clusters_dict[n], distinguishing_features_dict[n], vectors_dict[n], clusters_info_dict[n] = divisive_clustering(ngram_dict[n], concat_set_dict[n], 100, k, target = idxs)
+    try:
+      score = silhouette_score(vectors_dict[n], clusters_dict[n], metric='cosine')
+      myLogger.info("n-gram size: %f, silhouette score: %f" % (n, score))
+    except:
+      myLogger.info("n-gram size: %f, silhouette score: %f" % (n, 0))
 
 
-      merge_clusters(clusters_info_dict[n], distinguishing_features_dict[n], clusters_dict[n], vectors_dict[n])
+    merge_clusters(clusters_info_dict[n], distinguishing_features_dict[n], clusters_dict[n], vectors_dict[n])
 
-      # with open(f'n-gram-{n}-{k}.txt', 'a') as f:
-      #   f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
-      #   f.write('\n')
-      #   for idx, i in enumerate(idxs):
-      #     label_divisive = str(clusters_dict[n][idx])
-      #     userid = str(sample[i][0])
-      #     group = str(sample[i][1])
-      #     g = group_by_sessions.get_group(sample[i])
-      #     previous_query = g.iloc[0]['Query']
-      #     row = label_divisive + ',' + '+'.join(sequences[idx]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
-      #     f.write(row)
-      
-      # with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
-      #   for key, cluster_info in clusters_info_dict[n].items():
-      #     f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
-      #     children = str(cluster_info["children"])
-      #     f.write(f"Children {children} \n")
-      #     f.write("Distinguishing factors\n")
-      #     f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
-      #     f.write("\n")
+    # with open(f'n-gram-{n}-{k}.txt', 'a') as f:
+    #   f.write(','.join(['clusterId', 'sequences', 'userId', 'sessionNum', 'initialQuery']))
+    #   f.write('\n')
+    #   for idx, i in enumerate(idxs):
+    #     label_divisive = str(clusters_dict[n][idx])
+    #     userid = str(sample[i][0])
+    #     group = str(sample[i][1])
+    #     g = group_by_sessions.get_group(sample[i])
+    #     previous_query = g.iloc[0]['Query']
+    #     row = label_divisive + ',' + '+'.join(sequences[idx]) + ',' + userid + ',' + group + ',' + previous_query + '\n'
+    #     f.write(row)
+    
+    # with open(f'cluster-info-{n}-{k}.txt', 'w') as f:
+    #   for key, cluster_info in clusters_info_dict[n].items():
+    #     f.write("Cluster %d: diameter %f, size %d, type %s \n" % (key, cluster_info["diameter"], cluster_info["cluster_size"], cluster_info["type"]))
+    #     children = str(cluster_info["children"])
+    #     f.write(f"Children {children} \n")
+    #     f.write("Distinguishing factors\n")
+    #     f.write(str([concat_set_dict[n][idx] for idx in distinguishing_features_dict[n][key]]))
+    #     f.write("\n")
 
-      # save behavior clusters as json file
+    # save behavior clusters as json file
 
-      with open(f'cluster-info-{n}-{k}.json', 'a') as f:
-        tree = {
-          "root_id": 1,
-          "nodes": [],
-          "keyword_cluster": int(j)
+    with open(f'cluster-info-{n}-{k}.json', 'a') as f:
+      tree = {
+        "root_id": 1,
+        "nodes": [],
+        "keyword_cluster": 0
+      }
+      for key, cluster_info in clusters_info_dict[n].items():
+        distinguishing_feature = [(cluster_id, f, score) for cluster_id, features in distinguishing_features_dict[n][key] for f, score in features]
+        children = cluster_info["children"]
+        if children is not None:
+          for child in children:
+            clusters_info_dict[n][child]['parent'] = key
+        node = {
+          "id": key,
+          "label": cluster_info['type'],
+          "distinguishing_features": [{
+            "cluster_id": cluster_id,
+            "action_items": concat_set_dict[n][idx],
+            "score": score
+          } for cluster_id, idx, score in distinguishing_feature],
+          "divided_cluster": cluster_info["in_cluster_id"] if cluster_info["children"] is not None else None,
+          "remaining_cluster": cluster_info["out_cluster_id"] if cluster_info["children"] is not None else None,
+          "children": cluster_info["children"],
+          "subtree_size": cluster_info["cluster_size"],
+          "parent": cluster_info['parent'] # TODO
         }
-        for key, cluster_info in clusters_info_dict[n].items():
-          distinguishing_feature = [(cluster_id, f, score) for cluster_id, features in distinguishing_features_dict[n][key] for f, score in features]
-          children = cluster_info["children"]
-          if children is not None:
-            for child in children:
-              clusters_info_dict[n][child]['parent'] = key
-          node = {
-            "id": key,
-            "label": cluster_info['type'],
-            "distinguishing_features": [{
-              "cluster_id": cluster_id,
-              "action_items": concat_set_dict[n][idx],
-              "score": score
-            } for cluster_id, idx, score in distinguishing_feature],
-            "divided_cluster": cluster_info["in_cluster_id"] if cluster_info["children"] is not None else None,
-            "remaining_cluster": cluster_info["out_cluster_id"] if cluster_info["children"] is not None else None,
-            "children": cluster_info["children"],
-            "subtree_size": cluster_info["cluster_size"],
-            "parent": cluster_info['parent'] # TODO
-          }
-          tree["nodes"].append(node)
+        tree["nodes"].append(node)
 
-        json.dump(tree, f, ensure_ascii=False, indent = 2)
-      for idx, i in enumerate(idxs):
-        label_divisive = clusters_dict[n][idx]
-        random_seqs[i]["ClusterID"] = int(label_divisive)
+      json.dump(tree, f, ensure_ascii=False, indent = 2)
+    for idx, i in enumerate(idxs):
+      label_divisive = clusters_dict[n][idx]
+      random_seqs[i]["ClusterID"] = int(label_divisive)
 
     # save the session information as json file
     with open(f'sequences-{n}-{k}.json', 'w') as f:
