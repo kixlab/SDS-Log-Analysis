@@ -25,7 +25,6 @@ def extract_nouns(query: str):
   return query_nouns
 
 def isReformulated(query: str, prev_query: str):
-
   if prev_query == None:
     return False
 
@@ -234,6 +233,7 @@ class Query(Base):
     self.isRelated = isRelated
     self.extendedQuery = extendedQuery
     self.isRefined = isReformulated(query, previousQuery)
+    self.isRepeated = (query == previousQuery)
     eventName = 'RefinedQuery' if self.isRefined else 'NewQuery'
     if TIME_GAP_INTO_EVENT:
       if self.summary['total_stay_sec'] < 30:
@@ -432,9 +432,11 @@ for sessionId in sessionIds:
       extendedQuery = entry['_source']['query']['extend_keyword'],
       previousQuery=entry['_source']['summary']['prev_query_keyword']
     )
-    events.append(queryEvent)
 
     clickEvents = [process_action(a, sessionId, userId, query) for a in entry['_source']['actions']]
+    if len(clickEvents) == 0 and queryEvent.isRepeated:
+      continue
+    events.append(queryEvent)
 
     events.extend(clickEvents)
 
