@@ -1,5 +1,5 @@
 # %%
-
+from copy import copy
 import json
 from typing import List
 from datetime import datetime
@@ -7,6 +7,13 @@ from konlpy.tag import Okt
 from bertopic import BERTopic
 import numpy as np
 import re
+from gensim.test.utils import datapath
+from gensim.models.fasttext import load_facebook_vectors
+from tqdm import tqdm
+import os
+
+# from backports.datetime_fromisoformat import MonkeyPatch # patching for python < 3.7
+# MonkeyPatch.patch_fromisoformat()
 okt = Okt()
 
 TIME_GAP_INTO_EVENT = True
@@ -25,6 +32,7 @@ def extract_nouns(query: str):
   return query_nouns
 
 def isReformulated(query: str, prev_query: str):
+
   if prev_query == None:
     return False
 
@@ -37,7 +45,9 @@ def isReformulated(query: str, prev_query: str):
   union = query_nouns.union(prev_query_nouns)
   intersect = query_nouns.intersection(prev_query_nouns)
 
-  return len(intersect) / len(union) > 0.5
+  if len(union) <= 0:
+    print(query, prev_query)
+  return (len(intersect) / len(union) > 0.7) if len(union) > 0 else False
 
 def process_action(action: dict, sessionId: str, userId: str, query: str):
   if action['action_type'] == 'select_doc':
@@ -200,13 +210,14 @@ class Base:
     return self.__dict__
 
 class Session:
-  def __init__(self, sessionId: str, userId: str, metrics: dict, sequence: List[Base]):
+  def __init__(self, sessionId: str, userId: str, metrics: dict, sequence: List[Base], timestamp: datetime):
     self.sessionId = sessionId
     self.userId = userId
     self.metrics = metrics
     self.sequence = sequence
     self.BERTopicsKeywordCluster = -1
     self.ClusterID = -1
+    self.timestamp = timestamp
 
   def reprJSON(self):
     temp = {
@@ -215,9 +226,12 @@ class Session:
       "ClusterID": self.ClusterID,
       "BERTopicsKeywordCluster": self.BERTopicsKeywordCluster,
       "Sequence": self.sequence,
+      "Timestamp": self.timestamp
     }
 
-    temp |= self.metrics
+    # temp |= self.metrics
+    temp.update(self.metrics)
+
 
     return temp
 
@@ -255,6 +269,8 @@ class Query(Base):
     }
 
     if hasattr(self, 'intermediateMetrics'):
+      # temp.update(self.intermediateMetrics)
+
       temp |= self.intermediateMetrics
 
     return temp
@@ -326,6 +342,8 @@ class ComplexEncoder(json.JSONEncoder):
     else:
       return json.JSONEncoder.default(self, obj)
 
+def average_precision_score(ranks: List[int]):
+  [((idx + 1) / rank) for idx, rank in enumerate(ranks)]
 
 # %%
 
@@ -335,55 +353,65 @@ def compute_intermediate_metrics(queryEvent: Query, clickEvents: List[Base]):
   ranks = [c.target_doc_seq for c in clickEvents if isinstance(c, Click)]
 
   meanRR = (sum(reciprocal_ranks) / len(reciprocal_ranks)) if len(reciprocal_ranks) > 0 else 0
-  maxRR = max(reciprocal_ranks) if len(reciprocal_ranks) > 0 else 0
+  # maxRR = max(reciprocal_ranks) if len(reciprocal_ranks) > 0 else 0
+
+  averagePrecision = sum([((idx + 1) / rank) for idx, rank in enumerate(ranks)]) / len(ranks) if len(ranks) > 0 else 0
 
   isAbandoned = queryEvent.summary['is_select_doc'] == False and queryEvent.summary['is_select_top5_doc'] == False
 
   isClickTop5 = queryEvent.summary['is_select_top5_doc']
 
-  dcg = np.sum([(1 / np.log2(r + 1)) for r in ranks])
-  idcg = np.sum([(1 / np.log2((i + 1) + 1)) for i in range(len(ranks))]) 
-  ndcg = dcg / idcg # Naive NDCG, without any consideration on clicks
+  if len(ranks) > 0:
+    dcg = np.sum([(1 / np.log2(r + 1)) for r in ranks])
+    idcg = np.sum([(1 / np.log2((i + 1) + 1)) for i in range(len(ranks))]) 
+    ndcg = dcg / idcg # Naive NDCG, without any consideration on clicks
 
-  pSkip = 1 - (len(set(ranks)) / max(ranks))
+  else:
+    ndcg = 0
+
+  # pSkip = 1 - (len(set(ranks)) / max(ranks)) if len(ranks) > 0 else 0
 
   return {
     'meanRR': meanRR,
-    'maxRR': maxRR,
+    # 'maxRR': maxRR,
     'isAbandoned': isAbandoned,
     'isClickTop5': isClickTop5,
     'NDCG': ndcg,
-    'pSkip': pSkip
+    'AveragePrecision': averagePrecision,
+    # 'pSkip': pSkip
   }
 
 def compute_stats(session: List[Base]):
   queryEvents = [e for e in session if isinstance(e, Query)]
   totalQueryCount = len(queryEvents)
 
-  meanRR = sum([q.intermediateMetrics['meanRR'] for q in queryEvents if q.intermediateMetrics['meanRR'] > 0]) / len([q.intermediateMetrics['meanRR'] for q in queryEvents if q.intermediateMetrics['meanRR'] > 0])
+  meanRR = sum([q.intermediateMetrics['meanRR'] for q in queryEvents if q.intermediateMetrics['meanRR'] > 0]) / len([q.intermediateMetrics['meanRR'] for q in queryEvents if q.intermediateMetrics['meanRR'] > 0]) if len([q.intermediateMetrics['meanRR'] for q in queryEvents if q.intermediateMetrics['meanRR'] > 0]) > 0 else 0
 
-  maxRR = sum([q.intermediateMetrics['maxRR'] for q in queryEvents if q.intermediateMetrics['maxRR'] > 0]) / len([q.intermediateMetrics['maxRR'] for q in queryEvents if q.intermediateMetrics['maxRR'] > 0])
+  # maxRR = sum([q.intermediateMetrics['maxRR'] for q in queryEvents if q.intermediateMetrics['maxRR'] > 0]) / len([q.intermediateMetrics['maxRR'] for q in queryEvents if q.intermediateMetrics['maxRR'] > 0])
   
   abandonmentRate = len([q for q in queryEvents if q.intermediateMetrics['isAbandoned']]) / totalQueryCount
   reformulationRate = len([q for q in queryEvents if q.isRefined]) / totalQueryCount
   clickTop5Rate = len([q for q in queryEvents if q.intermediateMetrics['isClickTop5']]) / totalQueryCount
   ndcg = sum([q.intermediateMetrics['NDCG'] for q in queryEvents]) / len([q.intermediateMetrics['NDCG'] for q in queryEvents])
-  pSkip = sum([q.intermediateMetrics['pSkip'] for q in queryEvents]) / len([q.intermediateMetrics['pSkip'] for q in queryEvents])
+  map = sum([q.intermediateMetrics['AveragePrecision'] for q in queryEvents]) / len([q.intermediateMetrics['AveragePrecision'] for q in queryEvents])
+  # pSkip = sum([q.intermediateMetrics['pSkip'] for q in queryEvents]) / len([q.intermediateMetrics['pSkip'] for q in queryEvents])
   return {
     'MeanRR': meanRR,
-    'MaxRR': maxRR,
+    # 'MaxRR': maxRR,
     'AbandonmentRate': abandonmentRate,
     'ReformulationRate': reformulationRate,
     'Click@1-5': clickTop5Rate,
     'NDCG': ndcg,
-    'pSkip': pSkip
+    'MAP': map
+    # 'pSkip': pSkip
   }
 
 
 def assign_cluster_id(sessions: List[Session]):
   # topic_model = BERTopic(embedding_model = 'distiluse-base-multilingual-cased-v1')
-  topic_model = BERTopic(embedding_model = 'paraphrase-multilingual-mpnet-base-v2')
-
+  # topic_model = BERTopic(embedding_model = 'paraphrase-multilingual-mpnet-base-v2')
+  wv = load_facebook_vectors('')
+  topic_model = BERTopic(embedding_model=wv)
   queries = [s.extract_queries() for s in sessions]
 
   topics, prob = topic_model.fit_transform(queries)
@@ -401,6 +429,12 @@ def assign_cluster_id(sessions: List[Session]):
 # %%
 
 # %%
+# sessions_total = []
+
+# for txt in os.listdir('../../log_data'):
+
+#   with open(f'../../log_data/{txt}', 'r') as f:
+
 
 with open('./SDS-log-sample-new.json', 'r') as f:
   data = json.load(f)
@@ -411,7 +445,7 @@ sessionIds = set([h['_source']['session_id'] for h in hits]) # extract unique se
 
 sessions_total = []
 
-for sessionId in sessionIds:
+for sessionId in tqdm(sessionIds):
   entries = [h for h in hits if h['_source']['session_id'] == sessionId]
 
   events = []
@@ -450,7 +484,8 @@ for sessionId in sessionIds:
     sessionId = sessionId,
     userId=userId,
     metrics=session_metrics,
-    sequence = sorted_events
+    sequence = sorted_events,
+    timestamp = events[0].time
   )
 
   sessions_total.append(new_session)
@@ -459,11 +494,21 @@ for sessionId in sessionIds:
 
   # process events array to make sth
 
+def duplicate_sessions(s: Session, n = 100):
+  sessions = []
+  for i in range(0, n):
+    new_s = copy(s)
+    s.sessionId = s.sessionId + '-' + str(i)
+    sessions.append(new_s)
+
+  return sessions
 
 
 
-sessions_total = sessions_total * 100
-assign_cluster_id(sessions_total)
+new_sessions = [duplicate_sessions(s) for s in sessions_total]
+new_sessions = [item for sublist in new_sessions for item in sublist]
+
+assign_cluster_id(new_sessions)
 
 # %%
 print(sessions_total[0].sequence)
@@ -478,5 +523,5 @@ sessions_total[0].sequence[0].__dict__
 # print('done')
 
 with open('keyword_cluster_sessions.json', 'w') as f:
-  json.dump(sessions_total, f, cls=ComplexEncoder, ensure_ascii=False, indent = 2)
+  json.dump(new_sessions, f, cls=ComplexEncoder, ensure_ascii=False, indent = 2)
 # %%

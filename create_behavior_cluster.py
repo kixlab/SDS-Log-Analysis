@@ -25,10 +25,10 @@ from sklearn.feature_extraction.text import CountVectorizer
 
 np.seterr(all='raise')
 
-nlp = spacy.load('en_core_web_sm')
-model = SentenceTransformer('all-mpnet-base-v2')
+# nlp = spacy.load('en_core_web_sm')
+# model = SentenceTransformer('all-mpnet-base-v2')
 
-stopwords = nlp.Defaults.stop_words
+# stopwords = nlp.Defaults.stop_words
 MIN_CLUSTER_SIZE = 20
 # %%
 
@@ -679,7 +679,7 @@ for k in [20]: # adjust this to change the number of maximum number of distingui
 
     # save behavior clusters as json file
 
-    with open(f'cluster-info-{n}-{k}.json', 'a') as f:
+    with open(f'cluster-info-{n}-{k}.json', 'w') as f:
       tree = {
         "root_id": 1,
         "nodes": [],
