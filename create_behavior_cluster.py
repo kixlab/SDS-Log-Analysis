@@ -198,6 +198,16 @@ def getHalfPoint(scores):
 	return idx
 
 def getSweetSpotL(evalResults):
+  # Simply cut off the top 10% of the data?
+  # maxEvalResult = evalResults[0]
+  # return_idx = 0
+  # for evalResult in evalResults:
+  #  if evalResult[1] < maxEvalResult[1] * 0.1:
+  #    return_idx = evalResult[0]
+  #  return
+
+
+
 	if len(evalResults) == 0: return 0
 	cutoff = currentKnee = evalResults[-1][0]
 	# print(evalResults)
@@ -415,12 +425,12 @@ def divide(vectors, clusters, distinguishing_features, clusters_info, cluster_id
     # # print(cont)
     # chi2, p, dof, ex = chi2_contingency(cont)
     # print("Chi sq for cluster %d, component %d: %d" % (cluster_id, i, chi2))
-    chisqs.append((i, chi2))
+    chisqs.append((i, chi2)) # i is vector number here
     if chi2 > max_chisq:
       max_chisq = chi2
       max_idx = i
   chisqs = sorted(chisqs, key= lambda x: x[1], reverse = True)
-  chisqs = [(idx, score[1], score[0]) for idx, score in enumerate(chisqs)]
+  chisqs = [(idx, score[1], score[0]) for idx, score in enumerate(chisqs)] # score[1] is score value, score[0] is vector number, idx is the index by which the score is sorted
   halfpoint = getHalfPoint(chisqs)
   res = getSweetSpotL(chisqs[:max(200, 2 * halfpoint)])
   myLogger.info('Initial res: %d' % res)
